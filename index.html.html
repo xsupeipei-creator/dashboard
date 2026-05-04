@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>彰化房地產決策看板 - 泰和茂</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+        body { font-family: 'Inter', 'Microsoft JhengHei', sans-serif; background: #F5F5F7; color: #1D1D1F; }
+        .apple-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(20px); border-radius: 24px; border: 1px solid rgba(0,0,0,0.05); }
+        .stat-card { background: white; border-radius: 20px; padding: 1.5rem; border: 1px solid rgba(0,0,0,0.03); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); }
+        .active-pill { background: #1D1D1F !important; color: white !important; }
+    </style>
+</head>
+<body class="p-6 md:p-10">
+    
+    <div class="max-w-7xl mx-auto">
+        <!-- 標題 -->
+        <header class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tight">彰化縣預售屋數據儀表板</h1>
+                <p class="text-zinc-500 mt-1">Sensing Homes 泰和茂 AI自動化決策V1.0</p>
+            </div>
+            
+            <!-- 第一層：分析維度切換 -->
+            <div class="inline-flex bg-zinc-200/50 p-1 rounded-2xl" id="tab-container"></div>
+        </header>
+
+        <!-- 第二層：產品類型過濾 -->
+        <div class="mb-8 flex flex-wrap items-center gap-4">
+            <span class="text-sm font-semibold text-zinc-400 uppercase tracking-wider">產品類型過濾：</span>
+            <div class="flex bg-white rounded-xl shadow-sm border border-zinc-100 p-1" id="type-filter-container"></div>
+        </div>
+
+        <!-- 總量統計指標 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="stat-card">
+                <p class="text-sm font-medium text-zinc-500 mb-1" id="planned-label">全縣規劃總戶數</p>
+                <div class="flex items-baseline gap-2">
+                    <span id="stat-total-planned" class="text-4xl font-bold tracking-tight text-zinc-900">--</span>
+                    <span class="text-zinc-400 font-medium">戶</span>
+                </div>
+            </div>
+            <div class="stat-card border-l-4 border-zinc-900">
+                <p class="text-sm font-medium text-zinc-500 mb-1" id="sold-label">全縣已銷售總戶數</p>
+                <div class="flex items-baseline gap-2">
+                    <span id="stat-total-sold" class="text-4xl font-bold tracking-tight text-zinc-900">--</span>
+                    <span class="text-zinc-400 font-medium">戶</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 圖表區域 -->
+        <main class="apple-card p-8 min-h-[650px] shadow-xl">
+            <div id="chart-container" class="w-full h-[600px]"></div>
+        </main>
+    </div>
+
+    <script>
+        const config = {
+            url: 'https://juwwaboxfrjmfoqjlmzw.supabase.co',
+            key: 'sb_publishable_4pWMANCj7BV0pOAoFRaW4A_1qKGTxhw',
+            table: 'new_projects' 
+        };
+
+        const tabs = ['量體全貌', '區域銷售率', '區域價格', '房型熱度'];
+        const types = ['全部', '大樓', '華廈', '透天'];
+        
+        let activeTab = '量體全貌';
+        let activeType = '全部';
+        let rawData = [];
+        let myChart = echarts.init(document.getElementById('chart-container'));
+
+        function renderTabs() {
+            const container = document.getElementById('tab-container');
+            container.innerHTML = '';
+            tabs.forEach(tab => {
+                const btn = document.createElement('button');
+                btn.innerText = tab;
+                btn.className = `px-6 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === tab ? 'bg-white text-black shadow-sm' : 'text-zinc-500 hover:text-black'}`;
+                btn.onclick = () => { activeTab = tab; renderTabs(); renderChart(); };
+                container.appendChild(btn);
+            });
+        }
+
+        function renderTypeFilters() {
+            const container = document.getElementById('type-filter-container');
+            container.innerHTML = '';
+            types.forEach(type => {
+                const btn = document.createElement('button');
+                btn.innerText = type;
+                btn.className = `px-5 py-1.5 rounded-lg text-sm font-medium transition-all ${activeType === type ? 'active-pill shadow-sm' : 'text-zinc-500 hover:bg-zinc-50'}`;
+                btn.onclick = () => { activeType = type; renderTypeFilters(); updateStats(); renderChart(); };
+                container.appendChild(btn);
+            });
+        }
+
+        const getNum = (v) => {
+            const n = parseFloat(v);
+            return isNaN(n) ? 0 : n;
+        };
+
+        function getFilteredData() {
+            if (activeType === '全部') return rawData;
+            return rawData.filter(item => item.類型 === activeType);
+        }
+
+        function updateStats() {
+            const filtered = getFilteredData();
+            const totalPlanned = filtered.reduce((sum, item) => sum + getNum(item.規劃戶數), 0);
+            const totalSold = filtered.reduce((sum, item) => sum + getNum(item.銷售戶數), 0);
+            
+            const fmt = new Intl.NumberFormat('zh-TW');
+            document.getElementById('stat-total-planned').innerText = fmt.format(Math.round(totalPlanned));
+            document.getElementById('stat-total-sold').innerText = fmt.format(Math.round(totalSold));
+            
+            const suffix = activeType === '全部' ? '全縣' : `${activeType}`;
+            document.getElementById('planned-label').innerText = `${suffix}規劃總戶數`;
+            document.getElementById('sold-label').innerText = `${suffix}已銷售總戶數`;
+        }
+
+        function renderChart() {
+            const data = getFilteredData();
+            let option = {};
+
+            switch (activeTab) {
+                case '量體全貌':
+                    const treeGroups = {};
+                    data.forEach(item => {
+                        const reg = item.行政區 || '其他';
+                        if (!treeGroups[reg]) treeGroups[reg] = { planned: 0, sold: 0, projects: [] };
+                        const p = getNum(item.規劃戶數);
+                        const s = getNum(item.銷售戶數);
+                        treeGroups[reg].planned += p;
+                        treeGroups[reg].sold += s;
+                        treeGroups[reg].projects.push({ 
+                            name: item.案名 || '未命名', 
+                            value: p > 0 ? p : 0.01, 
+                            sold: s 
+                        });
+                    });
+
+                    const finalTreeData = Object.entries(treeGroups).map(([reg, d]) => ({ 
+                        name: reg, 
+                        value: Math.round(d.planned), 
+                        sold: Math.round(d.sold), 
+                        children: d.projects 
+                    }));
+
+                    option = {
+                        tooltip: { 
+                            formatter: (p) => `<b>${p.name}</b><br/>規劃：${Math.round(p.value)} 戶<br/>已售：${Math.round(p.data.sold || 0)} 戶` 
+                        },
+                        series: [{
+                            type: 'treemap', 
+                            data: finalTreeData, 
+                            roam: false, 
+                            nodeClick: 'zoomTo', 
+                            leafDepth: 1,
+                            label: { 
+                                show: true, 
+                                formatter: (p) => `${p.name}\n規 ${Math.round(p.value)} / 售 ${Math.round(p.data.sold || 0)}` 
+                            },
+                            // 🔥 修正關鍵：關閉 upperLabel 以移除重複的數字標題
+                            upperLabel: { show: false },
+                            itemStyle: { borderColor: '#fff', borderWidth: 2, gapWidth: 2 },
+                            levels: [
+                                { itemStyle: { borderColor: '#F4F4F5', borderWidth: 4, gapWidth: 4 } }, 
+                                { colorSaturation: [0.3, 0.6] }
+                            ]
+                        }]
+                    };
+                    break;
+
+                case '區域銷售率':
+                    const saleMap = {};
+                    data.forEach(item => {
+                        const label = activeType === '全部' ? `${item.行政區}-${item.類型}` : item.行政區;
+                        if (!saleMap[label]) saleMap[label] = { name: label, total: 0, sold: 0 };
+                        saleMap[label].total += getNum(item.規劃戶數);
+                        saleMap[label].sold += getNum(item.銷售戶數);
+                    });
+                    const saleData = Object.values(saleMap)
+                        .map(d => ({ ...d, rate: d.total > 0 ? Math.round((d.sold/d.total)*100) : 0, remaining: Math.max(0, d.total - d.sold) }))
+                        .sort((a, b) => b.rate - a.rate);
+
+                    option = {
+                        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                        legend: { data: ['已銷售', '待售量', '銷售率'], bottom: 0 },
+                        dataZoom: [{ type: 'slider', start: 0, end: 50, bottom: 40 }, { type: 'inside' }],
+                        xAxis: { type: 'category', data: saleData.map(d => d.name), axisLabel: { rotate: 30 } },
+                        yAxis: [{ type: 'value', name: '戶數' }, { type: 'value', name: '銷售率%', max: 100, position: 'right' }],
+                        series: [
+                            { name: '已銷售', type: 'bar', stack: 'total', data: saleData.map(d => Math.round(d.sold)), itemStyle: { color: '#18181B' } },
+                            { name: '待售量', type: 'bar', stack: 'total', data: saleData.map(d => Math.round(d.remaining)), itemStyle: { color: '#E4E4E7' } },
+                            { name: '銷售率', type: 'line', yAxisIndex: 1, data: saleData.map(d => d.rate), itemStyle: { color: '#EF4444' }, lineStyle: { width: 3 }, symbolSize: 8 }
+                        ]
+                    };
+                    break;
+
+                case '區域價格':
+                    const priceMap = {};
+                    data.forEach(item => {
+                        const key = item.行政區 || '未知';
+                        const price = getNum(item.銷售均價);
+                        if (price > 0) {
+                            if (!priceMap[key]) priceMap[key] = { sum: 0, count: 0 };
+                            priceMap[key].sum += price;
+                            priceMap[key].count += 1;
+                        }
+                    });
+                    const priceData = Object.entries(priceMap).map(([k, v]) => ({ name: k, avg: Math.round(v.sum/v.count*10)/10 })).sort((a, b) => a.avg - b.avg);
+                    option = {
+                        tooltip: { formatter: '{b}: {c} 萬/坪' },
+                        grid: { left: 100, right: 40 },
+                        xAxis: { type: 'value', name: '萬/坪' },
+                        yAxis: { type: 'category', data: priceData.map(d => d.name) },
+                        series: [{ type: 'bar', data: priceData.map(d => d.avg), itemStyle: { color: '#27272A', borderRadius: [0, 4, 4, 0] }, label: { show: true, position: 'right' } }]
+                    };
+                    break;
+
+                case '房型熱度':
+                    const roomMap = {};
+                    const roomTypes = ['1房', '2房', '3房', '4房'];
+                    data.forEach(item => {
+                        const reg = item.行政區 || '未知';
+                        const layout = String(item.規劃房型 || '');
+                        if (!roomMap[reg]) roomMap[reg] = { '1房':0, '2房':0, '3房':0, '4房':0 };
+                        roomTypes.forEach(t => { if (layout.includes(t)) roomMap[reg][t] += getNum(item.規劃戶數); });
+                    });
+                    const regions = Object.keys(roomMap);
+                    option = {
+                        legend: { data: roomTypes, bottom: 0 },
+                        tooltip: { trigger: 'axis' },
+                        xAxis: { type: 'category', data: regions, axisLabel: { rotate: 30 } },
+                        yAxis: { type: 'value' },
+                        series: roomTypes.map(t => ({ name: t, type: 'bar', stack: 'total', data: regions.map(r => Math.round(roomMap[r][t])) }))
+                    };
+                    break;
+            }
+            myChart.setOption(option, true);
+        }
+
+        async function init() {
+            renderTabs();
+            renderTypeFilters();
+            myChart.showLoading({ text: '同步數據中...', color: '#18181B' });
+            try {
+                const supabase = window.supabase.createClient(config.url, config.key);
+                const { data, error } = await supabase.from(config.table).select('*');
+                if (error) throw error;
+                rawData = data || [];
+                myChart.hideLoading();
+                updateStats(); 
+                renderChart();
+            } catch (err) {
+                console.error(err);
+                alert("連線失敗: " + err.message);
+            }
+        }
+
+        init();
+        window.addEventListener('resize', () => myChart && myChart.resize());
+    </script>
+</body>
+</html>
