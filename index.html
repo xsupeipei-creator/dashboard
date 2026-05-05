@@ -11,8 +11,9 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
         body { font-family: 'Inter', 'Microsoft JhengHei', sans-serif; background: #F5F5F7; color: #1D1D1F; }
         .apple-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(20px); border-radius: 24px; border: 1px solid rgba(0,0,0,0.05); box-shadow: 0 10px 30px rgba(0,0,0,0.03); }
-        .stat-card { background: white; border-radius: 20px; padding: 1.5rem; border: 1px solid rgba(0,0,0,0.03); }
+        .stat-card { background: white; border-radius: 20px; padding: 1.5rem; border: 1px solid rgba(0,0,0,0.03); transition: all 0.3s ease; }
         .active-pill { background: #1D1D1F !important; color: white !important; }
+        .highlight-stat { border-color: #1D1D1F; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
     </style>
 </head>
 <body class="p-6 md:p-10">
@@ -30,24 +31,22 @@
             <div class="flex bg-white rounded-xl shadow-sm border border-zinc-100 p-1" id="type-filter-container"></div>
         </div>
 
-        <!-- 頂部數據統計卡片：新增監測個案數 -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div class="stat-card">
+            <div class="stat-card" id="card-planned">
                 <p class="text-sm font-medium text-zinc-500 mb-1" id="planned-label">全縣規劃總戶數</p>
                 <div class="flex items-baseline gap-2">
                     <span id="stat-total-planned" class="text-4xl font-bold tracking-tight text-zinc-900">--</span>
                     <span class="text-zinc-400 font-medium">戶</span>
                 </div>
             </div>
-            <div class="stat-card border-l-4 border-zinc-900">
+            <div class="stat-card border-l-4 border-zinc-900" id="card-sold">
                 <p class="text-sm font-medium text-zinc-500 mb-1" id="sold-label">全縣已銷售總戶數</p>
                 <div class="flex items-baseline gap-2">
                     <span id="stat-total-sold" class="text-4xl font-bold tracking-tight text-zinc-900">--</span>
                     <span class="text-zinc-400 font-medium">戶</span>
                 </div>
             </div>
-            <!-- 新增個案數卡片 -->
-            <div class="stat-card">
+            <div class="stat-card" id="card-cases">
                 <p class="text-sm font-medium text-zinc-500 mb-1" id="cases-label">全縣監測個案數</p>
                 <div class="flex items-baseline gap-2">
                     <span id="stat-total-cases" class="text-4xl font-bold tracking-tight text-zinc-900">--</span>
@@ -78,6 +77,7 @@
         const types = ['全部', '大樓', '華廈', '透天'];
         let activeTab = '量體全貌';
         let activeType = '全部';
+        let activeRegion = null; 
         let rawData = [];
         let myChart = echarts.init(document.getElementById('chart-container'));
 
@@ -89,7 +89,13 @@
                 btn.innerText = tab;
                 const isActive = activeTab === tab;
                 btn.className = `px-6 py-2.5 rounded-xl text-sm font-semibold transition-all ${isActive ? 'bg-white text-black shadow-sm' : 'text-zinc-500 hover:text-black'}`;
-                btn.onclick = () => { activeTab = tab; renderTabs(); renderChart(); };
+                btn.onclick = () => { 
+                    activeTab = tab; 
+                    activeRegion = null; 
+                    renderTabs(); 
+                    renderChart(); 
+                    updateStats();
+                };
                 container.appendChild(btn);
             });
         }
@@ -101,7 +107,15 @@
                 const btn = document.createElement('button');
                 btn.innerText = type;
                 btn.className = `px-5 py-1.5 rounded-lg text-sm font-medium transition-all ${activeType === type ? 'active-pill shadow-sm' : 'text-zinc-500 hover:bg-zinc-50'}`;
-                btn.onclick = () => { activeType = type; renderTypeFilters(); updateStats(); renderChart(); };
+                btn.onclick = () => { 
+                    activeType = type; 
+                    // 🔥 修正關鍵：當切換產品類型時，強制將區域重置為全縣
+                    activeRegion = null; 
+                    
+                    renderTypeFilters(); 
+                    updateStats(); 
+                    renderChart(); 
+                };
                 container.appendChild(btn);
             });
         }
@@ -112,35 +126,47 @@
         };
 
         function getFilteredData() {
-            return activeType === '全部' ? rawData : rawData.filter(item => item.類型 === activeType);
+            let filtered = activeType === '全部' ? rawData : rawData.filter(item => item.類型 === activeType);
+            if (activeRegion) {
+                filtered = filtered.filter(item => item.行政區 === activeRegion);
+            }
+            return filtered;
         }
 
-        // 更新統計數據，包含個案數計算
         function updateStats() {
             const filtered = getFilteredData();
             const totalPlanned = filtered.reduce((sum, item) => sum + getNum(item.規劃戶數), 0);
             const totalSold = filtered.reduce((sum, item) => sum + getNum(item.銷售戶數), 0);
-            const totalCases = filtered.length; // 個案數即為篩選後的資料筆數
+            const totalCases = filtered.length;
             
             const fmt = new Intl.NumberFormat('zh-TW');
             document.getElementById('stat-total-planned').innerText = fmt.format(Math.round(totalPlanned));
             document.getElementById('stat-total-sold').innerText = fmt.format(Math.round(totalSold));
             document.getElementById('stat-total-cases').innerText = fmt.format(totalCases);
             
-            const suffix = activeType === '全部' ? '全縣' : `${activeType}`;
-            document.getElementById('planned-label').innerText = `${suffix}規劃總戶數`;
-            document.getElementById('sold-label').innerText = `${suffix}已銷售總戶數`;
-            document.getElementById('cases-label').innerText = `${suffix}監測個案數`;
+            const regionPrefix = activeRegion ? activeRegion : '全縣';
+            const typeSuffix = activeType === '全部' ? '' : activeType;
+            
+            document.getElementById('planned-label').innerText = `${regionPrefix}${typeSuffix}規劃總戶數`;
+            document.getElementById('sold-label').innerText = `${regionPrefix}${typeSuffix}已銷售總戶數`;
+            document.getElementById('cases-label').innerText = `${regionPrefix}${typeSuffix}監測個案數`;
+
+            const cards = ['card-planned', 'card-sold', 'card-cases'];
+            cards.forEach(id => {
+                if(activeRegion) document.getElementById(id).classList.add('highlight-stat');
+                else document.getElementById(id).classList.remove('highlight-stat');
+            });
         }
 
         function renderChart() {
-            const data = getFilteredData();
+            // 圖表渲染資料不應該被 activeRegion 影響，圖表永遠顯示全縣資料供使用者點擊
+            const chartData = activeType === '全部' ? rawData : rawData.filter(item => item.類型 === activeType);
             let option = {};
 
             switch (activeTab) {
                 case '量體全貌':
                     const treeGroups = {};
-                    data.forEach(item => {
+                    chartData.forEach(item => {
                         const reg = item.行政區 || '其他';
                         if (!treeGroups[reg]) treeGroups[reg] = { planned: 0, sold: 0, priceList: [], projects: [] };
                         const p = getNum(item.規劃戶數);
@@ -178,11 +204,37 @@
                             levels: [{ itemStyle: { borderColor: '#F4F4F5', borderWidth: 4, gapWidth: 4 } }, { colorSaturation: [0.3, 0.6] }]
                         }]
                     };
+
+                    myChart.off('click');
+                    myChart.on('click', (params) => {
+                        if (params.data.children) {
+                            activeRegion = params.name;
+                        } else {
+                            activeRegion = params.treePathInfo.length > 2 ? params.treePathInfo[1].name : null;
+                        }
+                        updateStats();
+                    });
+
+                    // 🔥 確保 ECharts 左下角的「麵包屑(返回上一層)」點擊時，也能將卡片重置為全縣
+                    myChart.on('click', 'series.treemap', function(params) {
+                         if (params.componentType === 'series' && params.treePathInfo.length <= 1) {
+                             activeRegion = null;
+                             updateStats();
+                         }
+                    });
+
+                    // 綁定全域點擊事件，如果點擊圖表空白處(例如右鍵退回)，確保數據歸位
+                    myChart.getZr().on('click', function (event) {
+                        if (!event.target) {
+                            activeRegion = null;
+                            updateStats();
+                        }
+                    });
                     break;
 
                 case '區域價格':
                     const pMap = {};
-                    data.forEach(item => {
+                    chartData.forEach(item => {
                         const key = item.行政區 || '未知';
                         const pr = getNum(item.銷售均價);
                         const name = item.案名 || '未命名';
@@ -227,7 +279,7 @@
 
                 case '區域銷售率':
                     const saleMap = {};
-                    data.forEach(item => {
+                    chartData.forEach(item => {
                         const label = activeType === '全部' ? `${item.行政區}-${item.類型}` : item.行政區;
                         if (!saleMap[label]) saleMap[label] = { name: label, total: 0, sold: 0 };
                         saleMap[label].total += getNum(item.規劃戶數);
