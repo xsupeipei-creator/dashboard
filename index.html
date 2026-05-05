@@ -14,6 +14,8 @@
         .stat-card { background: white; border-radius: 20px; padding: 1.5rem; border: 1px solid rgba(0,0,0,0.03); transition: all 0.3s ease; }
         .active-pill { background: #1D1D1F !important; color: white !important; }
         .highlight-stat { border-color: #1D1D1F; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .modal-animate { animation: fadeIn 0.2s ease-out forwards; }
     </style>
 </head>
 <body class="p-6 md:p-10">
@@ -21,37 +23,36 @@
         <header class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
                 <h1 class="text-3xl font-bold tracking-tight">市場數據決策儀表板</h1>
-                <p class="text-zinc-500 mt-1">Sensing Homes 泰和茂 AI 數據驅動規劃</p>
+                <p class="text-zinc-500 mt-1">Sensing Homes 泰和茂 AI 數據驅動規劃V1.0</p>
             </div>
             <div class="inline-flex bg-zinc-200/50 p-1 rounded-2xl" id="tab-container"></div>
         </header>
 
-        <div class="mb-8 flex flex-wrap items-center gap-4">
-            <span class="text-sm font-semibold text-zinc-400 uppercase tracking-wider">產品類型過濾：</span>
-            <div class="flex bg-white rounded-xl shadow-sm border border-zinc-100 p-1" id="type-filter-container"></div>
+        <div class="mb-8 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-4">
+                <span class="text-sm font-semibold text-zinc-400 uppercase tracking-wider">產品過濾：</span>
+                <div class="flex bg-white rounded-xl shadow-sm border border-zinc-100 p-1" id="type-filter-container"></div>
+            </div>
+            <div class="flex items-center gap-3 bg-white rounded-xl shadow-sm border border-zinc-100 p-1.5 px-3">
+                <span class="text-sm font-semibold text-zinc-400 uppercase tracking-wider">鎖定區域：</span>
+                <select id="region-select" class="bg-transparent border-none text-zinc-800 text-sm font-semibold focus:ring-0 outline-none cursor-pointer">
+                    <option value="">🌍 全縣 (取消過濾)</option>
+                </select>
+            </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div class="stat-card" id="card-planned">
                 <p class="text-sm font-medium text-zinc-500 mb-1" id="planned-label">全縣規劃總戶數</p>
-                <div class="flex items-baseline gap-2">
-                    <span id="stat-total-planned" class="text-4xl font-bold tracking-tight text-zinc-900">--</span>
-                    <span class="text-zinc-400 font-medium">戶</span>
-                </div>
+                <div class="flex items-baseline gap-2"><span id="stat-total-planned" class="text-4xl font-bold tracking-tight text-zinc-900">--</span><span class="text-zinc-400 font-medium">戶</span></div>
             </div>
             <div class="stat-card border-l-4 border-zinc-900" id="card-sold">
                 <p class="text-sm font-medium text-zinc-500 mb-1" id="sold-label">全縣已銷售總戶數</p>
-                <div class="flex items-baseline gap-2">
-                    <span id="stat-total-sold" class="text-4xl font-bold tracking-tight text-zinc-900">--</span>
-                    <span class="text-zinc-400 font-medium">戶</span>
-                </div>
+                <div class="flex items-baseline gap-2"><span id="stat-total-sold" class="text-4xl font-bold tracking-tight text-zinc-900">--</span><span class="text-zinc-400 font-medium">戶</span></div>
             </div>
             <div class="stat-card" id="card-cases">
                 <p class="text-sm font-medium text-zinc-500 mb-1" id="cases-label">全縣監測個案數</p>
-                <div class="flex items-baseline gap-2">
-                    <span id="stat-total-cases" class="text-4xl font-bold tracking-tight text-zinc-900">--</span>
-                    <span class="text-zinc-400 font-medium">案</span>
-                </div>
+                <div class="flex items-baseline gap-2"><span id="stat-total-cases" class="text-4xl font-bold tracking-tight text-zinc-900">--</span><span class="text-zinc-400 font-medium">案</span></div>
             </div>
         </div>
 
@@ -60,26 +61,70 @@
         </main>
 
         <footer class="mt-16 mb-8 text-center">
-            <p class="text-zinc-400 text-sm tracking-widest font-medium">
-                2026 @ by 泰和茂營建開發團隊
-            </p>
+            <p class="text-zinc-400 text-sm tracking-widest font-medium">2026 @ by 泰和茂營建開發團隊</p>
         </footer>
+    </div>
+
+    <!-- 個案實價登錄分析彈窗 -->
+    <div id="project-modal" class="fixed inset-0 z-50 hidden bg-zinc-900/40 backdrop-blur-sm flex items-center justify-center p-4 transition-opacity">
+        <div class="apple-card w-full max-w-4xl bg-white flex flex-col overflow-hidden modal-animate shadow-2xl border border-zinc-200">
+            <div class="px-8 py-5 border-b border-zinc-100 flex justify-between items-center bg-zinc-50/50">
+                <div>
+                    <h2 id="modal-title" class="text-2xl font-bold text-zinc-900 tracking-tight">案名載入中...</h2>
+                    <p class="text-sm text-zinc-500 mt-1" id="modal-subtitle">內政部實價登錄 各房型價量分析</p>
+                </div>
+                <button onclick="closeProjectModal()" class="text-zinc-400 hover:text-zinc-900 text-3xl leading-none transition-colors p-2">&times;</button>
+            </div>
+            
+            <div class="p-8 flex-1 overflow-y-auto">
+                <div id="modal-stats" class="grid grid-cols-2 gap-4 mb-8 hidden">
+                    <div class="bg-zinc-50 rounded-xl p-4 border border-zinc-100 border-l-4 border-l-zinc-900">
+                        <p class="text-xs font-semibold text-zinc-500 uppercase">歷史最高單價</p>
+                        <p class="text-2xl font-bold text-zinc-900 mt-1"><span id="modal-max-price">--</span><span class="text-sm font-normal text-zinc-400 ml-1">萬/坪</span></p>
+                    </div>
+                    <div class="bg-zinc-50 rounded-xl p-4 border border-zinc-100 border-l-4 border-l-zinc-300">
+                        <p class="text-xs font-semibold text-zinc-500 uppercase">歷史最低單價</p>
+                        <p class="text-2xl font-bold text-zinc-900 mt-1"><span id="modal-min-price">--</span><span class="text-sm font-normal text-zinc-400 ml-1">萬/坪</span></p>
+                    </div>
+                </div>
+                <div id="modal-chart-container" class="w-full h-[350px]"></div>
+            </div>
+        </div>
     </div>
 
     <script>
         const config = {
             url: 'https://juwwaboxfrjmfoqjlmzw.supabase.co',
             key: 'sb_publishable_4pWMANCj7BV0pOAoFRaW4A_1qKGTxhw',
-            table: 'new_projects' 
+            table: 'new_projects',
+            trendTable: 'real_estate_records'
         };
 
-        const tabs = ['量體全貌', '區域價格', '區域銷售率'];
+        const tabs = ['量體全貌', '區域價格', '區域銷售率', '趨勢分析'];
         const types = ['全部', '大樓', '華廈', '透天'];
         let activeTab = '量體全貌';
         let activeType = '全部';
         let activeRegion = null; 
         let rawData = [];
+        let trendData = []; 
         let myChart = echarts.init(document.getElementById('chart-container'));
+        let modalChart = null; 
+
+        // 🔥🔥🔥 突破 Supabase 1000 筆限制的引擎 🔥🔥🔥
+        async function fetchAllSupabaseData(client, tableName) {
+            let allRecords = [];
+            let from = 0;
+            let step = 1000;
+            while (true) {
+                const { data, error } = await client.from(tableName).select('*').range(from, from + step - 1);
+                if (error) { console.error(error); break; }
+                if (!data || data.length === 0) break;
+                allRecords = allRecords.concat(data);
+                if (data.length < step) break; // 資料抓完了
+                from += step;
+            }
+            return allRecords;
+        }
 
         function renderTabs() {
             const container = document.getElementById('tab-container');
@@ -89,13 +134,7 @@
                 btn.innerText = tab;
                 const isActive = activeTab === tab;
                 btn.className = `px-6 py-2.5 rounded-xl text-sm font-semibold transition-all ${isActive ? 'bg-white text-black shadow-sm' : 'text-zinc-500 hover:text-black'}`;
-                btn.onclick = () => { 
-                    activeTab = tab; 
-                    activeRegion = null; 
-                    renderTabs(); 
-                    renderChart(); 
-                    updateStats();
-                };
+                btn.onclick = () => { activeTab = tab; renderTabs(); renderChart(); };
                 container.appendChild(btn);
             });
         }
@@ -107,29 +146,29 @@
                 const btn = document.createElement('button');
                 btn.innerText = type;
                 btn.className = `px-5 py-1.5 rounded-lg text-sm font-medium transition-all ${activeType === type ? 'active-pill shadow-sm' : 'text-zinc-500 hover:bg-zinc-50'}`;
-                btn.onclick = () => { 
-                    activeType = type; 
-                    // 🔥 修正關鍵：當切換產品類型時，強制將區域重置為全縣
-                    activeRegion = null; 
-                    
-                    renderTypeFilters(); 
-                    updateStats(); 
-                    renderChart(); 
-                };
+                btn.onclick = () => { activeType = type; renderTypeFilters(); updateStats(); renderChart(); };
                 container.appendChild(btn);
             });
         }
 
-        const getNum = (v) => {
-            const n = parseFloat(v);
-            return isNaN(n) ? 0 : n;
-        };
+        function renderRegionSelect() {
+            const select = document.getElementById('region-select');
+            const regions = [...new Set(rawData.map(item => item.行政區))].filter(Boolean).sort();
+            select.innerHTML = '<option value="">🌍 全縣 (取消過濾)</option>';
+            regions.forEach(reg => {
+                const opt = document.createElement('option');
+                opt.value = reg; opt.innerText = `📍 ${reg}`;
+                if (reg === activeRegion) opt.selected = true;
+                select.appendChild(opt);
+            });
+            select.onchange = (e) => { activeRegion = e.target.value || null; updateStats(); renderChart(); };
+        }
+
+        const getNum = (v) => parseFloat(v) || 0;
 
         function getFilteredData() {
             let filtered = activeType === '全部' ? rawData : rawData.filter(item => item.類型 === activeType);
-            if (activeRegion) {
-                filtered = filtered.filter(item => item.行政區 === activeRegion);
-            }
+            if (activeRegion) filtered = filtered.filter(item => item.行政區 === activeRegion);
             return filtered;
         }
 
@@ -137,12 +176,11 @@
             const filtered = getFilteredData();
             const totalPlanned = filtered.reduce((sum, item) => sum + getNum(item.規劃戶數), 0);
             const totalSold = filtered.reduce((sum, item) => sum + getNum(item.銷售戶數), 0);
-            const totalCases = filtered.length;
             
             const fmt = new Intl.NumberFormat('zh-TW');
             document.getElementById('stat-total-planned').innerText = fmt.format(Math.round(totalPlanned));
             document.getElementById('stat-total-sold').innerText = fmt.format(Math.round(totalSold));
-            document.getElementById('stat-total-cases').innerText = fmt.format(totalCases);
+            document.getElementById('stat-total-cases').innerText = fmt.format(filtered.length);
             
             const regionPrefix = activeRegion ? activeRegion : '全縣';
             const typeSuffix = activeType === '全部' ? '' : activeType;
@@ -158,121 +196,207 @@
             });
         }
 
+        function openProjectModal(projectName) {
+            document.getElementById('project-modal').classList.remove('hidden');
+            document.getElementById('modal-title').innerText = projectName;
+            if (!modalChart) modalChart = echarts.init(document.getElementById('modal-chart-container'));
+
+            const normalize = (str) => String(str || '').replace(/[\s\(\)（）]/g, '').toLowerCase();
+            const targetName = normalize(projectName);
+
+            const records = trendData.filter(item => {
+                const n = normalize(item.建案名稱);
+                if (!n || n.length < 2) return false;
+                return n.includes(targetName) || targetName.includes(n);
+            });
+
+            if (records.length === 0) {
+                document.getElementById('modal-stats').classList.add('hidden');
+                modalChart.clear();
+                modalChart.setOption({ title: { text: '此建案目前暫無實價登錄資料揭露', left: 'center', top: 'middle', textStyle: { color: '#EF4444', fontWeight: 'normal', fontSize: 14 } }});
+                return;
+            }
+
+            const prices = records.map(r => getNum(r.單價萬)).filter(p => p > 0);
+            if (prices.length > 0) {
+                document.getElementById('modal-max-price').innerText = Math.max(...prices).toFixed(1);
+                document.getElementById('modal-min-price').innerText = Math.min(...prices).toFixed(1);
+            } else {
+                document.getElementById('modal-max-price').innerText = '--';
+                document.getElementById('modal-min-price').innerText = '--';
+            }
+            document.getElementById('modal-stats').classList.remove('hidden');
+
+            const roomStats = {};
+            let hasUnknownData = false;
+
+            records.forEach(item => {
+                const r = item['建物現況格局-房'] || item['建物格局-房'] || item['房數'];
+                let label = '未知房型';
+                if (r !== undefined && r !== null && r !== '') {
+                    const parsed = parseInt(r);
+                    if (!isNaN(parsed)) {
+                        if (parsed === 0) label = '套房/其他';
+                        else if (parsed >= 5) label = '5房以上';
+                        else label = `${parsed}房`;
+                    }
+                }
+                if (label === '未知房型') hasUnknownData = true;
+
+                if (!roomStats[label]) roomStats[label] = { sum: 0, count: 0, validPriceCount: 0 };
+                
+                roomStats[label].count += 1;
+                const p = getNum(item.單價萬);
+                if (p > 0) { 
+                    roomStats[label].sum += p; 
+                    roomStats[label].validPriceCount += 1; 
+                }
+            });
+
+            document.getElementById('modal-subtitle').innerText = hasUnknownData 
+                ? '內政部實價登錄 各房型價量分析 (⚠️偵測到部分紀錄無格局資訊)' 
+                : '內政部實價登錄 各房型價量分析(剔除店面、特殊交易但不排除解約解數據)';
+
+            const order = ['套房/其他', '1房', '2房', '3房', '4房', '5房以上', '未知房型'];
+            const sortedLabels = Object.keys(roomStats).sort((a, b) => order.indexOf(a) - order.indexOf(b));
+            
+            const barData = sortedLabels.map(k => roomStats[k].count);
+            const lineData = sortedLabels.map(k => roomStats[k].validPriceCount > 0 ? (roomStats[k].sum / roomStats[k].validPriceCount).toFixed(1) : null);
+
+            modalChart.setOption({
+                tooltip: { 
+                    trigger: 'axis', 
+                    axisPointer: { type: 'cross', crossStyle: { color: '#999' } },
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)', borderColor: '#E4E4E7', textStyle: { color: '#18181B' }
+                },
+                legend: { data: ['揭露銷售戶數', '各房型均價'], bottom: 0 },
+                grid: { left: 40, right: 40, bottom: 40, top: 40, containLabel: true },
+                xAxis: [ { type: 'category', data: sortedLabels, axisPointer: { type: 'shadow' }, axisLabel: { fontWeight: 'bold', color: '#3F3F46' } } ],
+                yAxis: [
+                    { type: 'value', name: '戶數', minInterval: 1, splitLine: { show: false }, axisLabel: { color: '#71717A' } },
+                    { type: 'value', name: '均價 (萬/坪)', splitLine: { lineStyle: { type: 'dashed', color: '#F4F4F5' } }, axisLabel: { color: '#EF4444' } }
+                ],
+                series: [
+                    { name: '揭露銷售戶數', type: 'bar', data: barData, barMaxWidth: 60, itemStyle: { color: '#18181B', borderRadius: [4, 4, 0, 0] }, label: { show: true, position: 'top', formatter: '{c} 戶', color: '#71717A' } },
+                    { name: '各房型均價', type: 'line', yAxisIndex: 1, data: lineData, itemStyle: { color: '#EF4444' }, lineStyle: { width: 3 }, symbolSize: 10, label: { show: true, position: 'top', formatter: '{c} 萬', color: '#EF4444', fontWeight: 'bold' } }
+                ]
+            }, true);
+            setTimeout(() => modalChart.resize(), 50); 
+        }
+
+        function closeProjectModal() { document.getElementById('project-modal').classList.add('hidden'); }
+
         function renderChart() {
-            // 圖表渲染資料不應該被 activeRegion 影響，圖表永遠顯示全縣資料供使用者點擊
             const chartData = activeType === '全部' ? rawData : rawData.filter(item => item.類型 === activeType);
             let option = {};
+            myChart.off('click'); 
 
             switch (activeTab) {
+                case '趨勢分析':
+                    let tData = trendData;
+                    if (activeType !== '全部') tData = tData.filter(item => item.類型 === activeType);
+                    if (activeRegion) tData = tData.filter(item => item.行政區 === activeRegion);
+
+                    const monthMap = {};
+                    tData.forEach(item => {
+                        const dateStr = String(item.成交日期 || '').replace(/[^0-9]/g, '');
+                        if (dateStr.length >= 6) {
+                            let y, mo;
+                            if (dateStr.length === 7) { y = dateStr.substring(0,3); mo = dateStr.substring(3,5); }
+                            else if (dateStr.length === 8) { y = dateStr.substring(0,4); mo = dateStr.substring(4,6); }
+                            else if (dateStr.length === 6) { y = dateStr.substring(0,2); mo = dateStr.substring(2,4); } 
+                            
+                            const numY = parseInt(y);
+                            if (!isNaN(numY) && numY > 0) {
+                                let displayY = numY > 1911 ? numY - 1911 : numY; 
+                                // 🔥 動態支援 111年 ~ 最新年份的資料
+                                if (displayY >= 111) {
+                                    const monthKey = `${displayY}年${parseInt(mo)}月`;
+                                    const pr = getNum(item.單價萬);
+                                    if (pr > 0) {
+                                        if (!monthMap[monthKey]) monthMap[monthKey] = { sum: 0, count: 0, sortKey: displayY * 100 + parseInt(mo) };
+                                        monthMap[monthKey].sum += pr; 
+                                        monthMap[monthKey].count += 1;
+                                    }
+                                }
+                            }
+                        }
+                    });
+
+                    const trendList = Object.entries(monthMap)
+                        .map(([k, v]) => ({ month: k, avg: Math.round((v.sum / v.count) * 10) / 10, sortKey: v.sortKey }))
+                        .sort((a, b) => a.sortKey - b.sortKey);
+                    
+                    const xData = trendList.map(d => d.month); 
+                    const yData = trendList.map(d => d.avg);
+                    const titlePrefix = activeRegion ? activeRegion : '全縣'; 
+                    const typeSuffix = activeType === '全部' ? '全產品' : activeType;
+
+                    option = {
+                        title: { text: xData.length > 0 ? `${titlePrefix} ${typeSuffix} 歷月價格趨勢 (111年至今)` : `${titlePrefix} ${typeSuffix} (尚無實價紀錄)`, left: 'center', top: 10, textStyle: { color: '#18181B', fontSize: 16, fontWeight: '600' } },
+                        tooltip: { trigger: 'axis', formatter: '{b}<br/>平均單價：<b>{c}</b> 萬/坪' }, grid: { left: 50, right: 50, bottom: 40, top: 60 },
+                        xAxis: { type: 'category', data: xData, boundaryGap: false, axisLabel: { color: '#71717A' }, axisLine: { lineStyle: { color: '#E4E4E7' } } },
+                        yAxis: { type: 'value', name: '萬/坪', splitLine: { lineStyle: { type: 'dashed', color: '#F4F4F5' } }, scale: true },
+                        series: [{ name: '平均單價', type: 'line', smooth: true, data: yData, lineStyle: { width: 4, color: '#18181B' }, itemStyle: { color: '#18181B' }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(24, 24, 27, 0.2)' }, { offset: 1, color: 'rgba(24, 24, 27, 0)' }]) }, symbolSize: 8, label: { show: true, position: 'top', formatter: '{c}', color: '#18181B', fontWeight: 'bold' } }]
+                    };
+                    break;
+
                 case '量體全貌':
                     const treeGroups = {};
                     chartData.forEach(item => {
                         const reg = item.行政區 || '其他';
                         if (!treeGroups[reg]) treeGroups[reg] = { planned: 0, sold: 0, priceList: [], projects: [] };
-                        const p = getNum(item.規劃戶數);
-                        const s = getNum(item.銷售戶數);
-                        const pr = getNum(item.銷售均價);
-                        treeGroups[reg].planned += p;
-                        treeGroups[reg].sold += s;
+                        const p = getNum(item.規劃戶數); const s = getNum(item.銷售戶數); const pr = getNum(item.銷售均價);
+                        treeGroups[reg].planned += p; treeGroups[reg].sold += s;
                         if (pr > 0) treeGroups[reg].priceList.push(pr);
                         treeGroups[reg].projects.push({ name: item.案名 || '未命名', value: p > 0 ? p : 0.01, sold: s, price: pr });
                     });
                     const finalTreeData = Object.entries(treeGroups).map(([reg, d]) => ({ 
-                        name: reg, 
-                        value: Math.round(d.planned), 
-                        sold: Math.round(d.sold), 
-                        avgPrice: d.priceList.length > 0 ? Math.round((d.priceList.reduce((a, b) => a + b, 0) / d.priceList.length) * 10) / 10 : 0,
-                        children: d.projects 
+                        name: reg, value: Math.round(d.planned), sold: Math.round(d.sold), avgPrice: d.priceList.length > 0 ? Math.round((d.priceList.reduce((a, b) => a + b, 0) / d.priceList.length) * 10) / 10 : 0, children: d.projects 
                     }));
                     option = {
                         tooltip: { formatter: (p) => {
-                            const val = Math.round(p.value);
-                            const s = Math.round(p.data.sold || 0);
-                            const pr = p.data.avgPrice || p.data.price;
+                            const val = Math.round(p.value); const s = Math.round(p.data.sold || 0); const pr = p.data.avgPrice || p.data.price;
                             return `<b>${p.name}</b><br/>規劃：${val} 戶<br/>已售：${s} 戶${pr > 0 ? `<br/>單價：${pr} 萬/坪` : ''}`;
                         }},
                         series: [{
                             type: 'treemap', data: finalTreeData, roam: false, nodeClick: 'zoomTo', leafDepth: 1,
-                            label: { show: true, formatter: (p) => {
-                                const val = Math.round(p.value);
-                                const s = Math.round(p.data.sold || 0);
-                                const pr = p.data.avgPrice || p.data.price;
-                                return `${p.name}\n規 ${val} / 售 ${s}${pr > 0 ? ` / 價 ${pr}萬` : ''}`;
-                            }},
-                            upperLabel: { show: false },
-                            itemStyle: { borderColor: '#fff', borderWidth: 2, gapWidth: 2 },
+                            label: { show: true, formatter: (p) => `${p.name}\n規 ${Math.round(p.value)} / 售 ${Math.round(p.data.sold || 0)}${p.data.avgPrice || p.data.price > 0 ? ` / 價 ${p.data.avgPrice || p.data.price}萬` : ''}` },
+                            upperLabel: { show: false }, itemStyle: { borderColor: '#fff', borderWidth: 2, gapWidth: 2 },
                             levels: [{ itemStyle: { borderColor: '#F4F4F5', borderWidth: 4, gapWidth: 4 } }, { colorSaturation: [0.3, 0.6] }]
                         }]
                     };
 
-                    myChart.off('click');
                     myChart.on('click', (params) => {
                         if (params.data.children) {
-                            activeRegion = params.name;
+                            activeRegion = params.name; document.getElementById('region-select').value = activeRegion || ''; updateStats();
                         } else {
-                            activeRegion = params.treePathInfo.length > 2 ? params.treePathInfo[1].name : null;
+                            openProjectModal(params.name);
                         }
-                        updateStats();
                     });
-
-                    // 🔥 確保 ECharts 左下角的「麵包屑(返回上一層)」點擊時，也能將卡片重置為全縣
                     myChart.on('click', 'series.treemap', function(params) {
-                         if (params.componentType === 'series' && params.treePathInfo.length <= 1) {
-                             activeRegion = null;
-                             updateStats();
-                         }
-                    });
-
-                    // 綁定全域點擊事件，如果點擊圖表空白處(例如右鍵退回)，確保數據歸位
-                    myChart.getZr().on('click', function (event) {
-                        if (!event.target) {
-                            activeRegion = null;
-                            updateStats();
-                        }
+                         if (params.componentType === 'series' && params.treePathInfo.length <= 1) { activeRegion = null; document.getElementById('region-select').value = ''; updateStats(); }
                     });
                     break;
 
                 case '區域價格':
                     const pMap = {};
                     chartData.forEach(item => {
-                        const key = item.行政區 || '未知';
-                        const pr = getNum(item.銷售均價);
-                        const name = item.案名 || '未命名';
-                        if (pr > 0) {
-                            if (!pMap[key]) pMap[key] = [];
-                            pMap[key].push({ pr, name });
-                        }
+                        const key = item.行政區 || '未知'; const pr = getNum(item.銷售均價); const name = item.案名 || '未命名';
+                        if (pr > 0) { if (!pMap[key]) pMap[key] = []; pMap[key].push({ pr, name }); }
                     });
                     const pData = Object.entries(pMap).map(([k, items]) => {
-                        const avg = items.reduce((a, b) => a + b.pr, 0) / items.length;
-                        const topProject = items.reduce((prev, curr) => (prev.pr > curr.pr) ? prev : curr);
-                        return { 
-                            name: k, 
-                            avg: Math.round(avg * 10) / 10, 
-                            max: Math.round(topProject.pr * 10) / 10,
-                            gap: Math.round((topProject.pr - avg) * 10) / 10,
-                            topName: topProject.name
-                        };
+                        const avg = items.reduce((a, b) => a + b.pr, 0) / items.length; const topProject = items.reduce((prev, curr) => (prev.pr > curr.pr) ? prev : curr);
+                        return { name: k, avg: Math.round(avg * 10) / 10, max: Math.round(topProject.pr * 10) / 10, gap: Math.round((topProject.pr - avg) * 10) / 10, topName: topProject.name };
                     }).sort((a, b) => a.max - b.max);
 
                     option = {
-                        tooltip: { 
-                            trigger: 'axis',
-                            axisPointer: { type: 'shadow' },
-                            formatter: (params) => {
-                                const d = pData[params[0].dataIndex];
-                                return `<b>${d.name}</b><br/>區域均價：${d.avg} 萬/坪<br/>區域最高：${d.max} 萬/坪<br/>指標個案：${d.topName}`;
-                            }
-                        },
-                        legend: { data: ['區域均價', '最高價差'], bottom: 0 },
-                        grid: { left: 100, right: 180, bottom: 60, top: 20 },
-                        xAxis: { type: 'value', name: '萬/坪' },
-                        yAxis: { type: 'category', data: pData.map(d => d.name) },
+                        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: (params) => `<b>${pData[params[0].dataIndex].name}</b><br/>區域均價：${pData[params[0].dataIndex].avg} 萬/坪<br/>區域最高：${pData[params[0].dataIndex].max} 萬/坪<br/>指標個案：${pData[params[0].dataIndex].topName}` },
+                        legend: { data: ['區域均價', '最高價差'], bottom: 0 }, grid: { left: 100, right: 180, bottom: 60, top: 20 },
+                        xAxis: { type: 'value', name: '萬/坪' }, yAxis: { type: 'category', data: pData.map(d => d.name) },
                         series: [
                             { name: '區域均價', type: 'bar', stack: 'price', data: pData.map(d => d.avg), itemStyle: { color: '#18181B' } },
-                            { name: '最高價差', type: 'bar', stack: 'price', data: pData.map(d => d.gap), itemStyle: { color: '#E4E4E7' },
-                              label: { show: true, position: 'right', formatter: (p) => `🔝 ${pData[p.dataIndex].max} | ${pData[p.dataIndex].topName}`, textStyle: { color: '#71717A', fontWeight: '600', fontSize: 11 } }
-                            }
+                            { name: '最高價差', type: 'bar', stack: 'price', data: pData.map(d => d.gap), itemStyle: { color: '#E4E4E7' }, label: { show: true, position: 'right', formatter: (p) => `🔝 ${pData[p.dataIndex].max} | ${pData[p.dataIndex].topName}`, textStyle: { color: '#71717A', fontWeight: '600', fontSize: 11 } } }
                         ]
                     };
                     break;
@@ -282,25 +406,14 @@
                     chartData.forEach(item => {
                         const label = activeType === '全部' ? `${item.行政區}-${item.類型}` : item.行政區;
                         if (!saleMap[label]) saleMap[label] = { name: label, total: 0, sold: 0 };
-                        saleMap[label].total += getNum(item.規劃戶數);
-                        saleMap[label].sold += getNum(item.銷售戶數);
+                        saleMap[label].total += getNum(item.規劃戶數); saleMap[label].sold += getNum(item.銷售戶數);
                     });
                     const saleData = Object.values(saleMap).map(d => ({ ...d, rate: d.total > 0 ? Math.round((d.sold/d.total)*100) : 0, remaining: Math.max(0, d.total - d.sold) })).sort((a, b) => b.rate - a.rate);
                     option = {
-                        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-                        legend: { data: ['已銷售', '待售量', '銷售率'], bottom: 0 },
-                        dataZoom: [
-                            { type: 'slider', startValue: 0, endValue: 11, bottom: 40, zoomLock: true, brushSelect: false },
-                            { type: 'inside', zoomOnMouseWheel: false, moveOnMouseWheel: true }
-                        ],
-                        grid: { bottom: 100, top: 40, left: 50, right: 50 },
-                        xAxis: { type: 'category', data: saleData.map(d => d.name), axisLabel: { rotate: 30 }, min: 0, max: Math.max(11, saleData.length - 1) },
-                        yAxis: [{ type: 'value', name: '戶數' }, { type: 'value', name: '銷售率%', max: 100, position: 'right' }],
-                        series: [
-                            { name: '已銷售', type: 'bar', stack: 'total', data: saleData.map(d => Math.round(d.sold)), itemStyle: { color: '#18181B' } },
-                            { name: '待售量', type: 'bar', stack: 'total', data: saleData.map(d => Math.round(d.remaining)), itemStyle: { color: '#E4E4E7' } },
-                            { name: '銷售率', type: 'line', yAxisIndex: 1, data: saleData.map(d => d.rate), itemStyle: { color: '#EF4444' }, lineStyle: { width: 3 }, symbolSize: 8 }
-                        ]
+                        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } }, legend: { data: ['已銷售', '待售量', '銷售率'], bottom: 0 },
+                        dataZoom: [{ type: 'slider', startValue: 0, endValue: 11, bottom: 40, zoomLock: true, brushSelect: false }, { type: 'inside', zoomOnMouseWheel: false, moveOnMouseWheel: true }],
+                        grid: { bottom: 100, top: 40, left: 50, right: 50 }, xAxis: { type: 'category', data: saleData.map(d => d.name), axisLabel: { rotate: 30 }, min: 0, max: Math.max(11, saleData.length - 1) }, yAxis: [{ type: 'value', name: '戶數' }, { type: 'value', name: '銷售率%', max: 100, position: 'right' }],
+                        series: [{ name: '已銷售', type: 'bar', stack: 'total', data: saleData.map(d => Math.round(d.sold)), itemStyle: { color: '#18181B' } }, { name: '待售量', type: 'bar', stack: 'total', data: saleData.map(d => Math.round(d.remaining)), itemStyle: { color: '#E4E4E7' } }, { name: '銷售率', type: 'line', yAxisIndex: 1, data: saleData.map(d => d.rate), itemStyle: { color: '#EF4444' }, lineStyle: { width: 3 }, symbolSize: 8 }]
                     };
                     break;
             }
@@ -308,25 +421,51 @@
         }
 
         async function init() {
-            renderTabs();
-            renderTypeFilters();
-            myChart.showLoading({ text: '數據同步中...', color: '#18181B' });
+            renderTabs(); renderTypeFilters();
+            myChart.showLoading({ text: '大數據完整拉取中...', color: '#18181B' });
             try {
                 const supabase = window.supabase.createClient(config.url, config.key);
-                const { data, error } = await supabase.from(config.table).select('*');
-                if (error) throw error;
-                rawData = data || [];
-                myChart.hideLoading();
-                updateStats(); 
-                renderChart();
-            } catch (err) {
-                console.error(err);
-                alert("連線失敗: " + err.message);
-            }
+                
+                // 🔥 呼叫新的分頁引擎，無視 1000 筆限制
+                const [projectsData, trendsData] = await Promise.all([
+                    fetchAllSupabaseData(supabase, config.table),
+                    fetchAllSupabaseData(supabase, config.trendTable)
+                ]);
+                
+                rawData = projectsData || [];
+                
+                trendData = (trendsData || []).map(item => {
+                    let price = item.單價萬;
+                    if (!price && item.單價元平方公尺) {
+                        price = (parseFloat(item.單價元平方公尺) * 3.30579 / 10000).toFixed(1);
+                    }
+                    
+                    let type = item.類型;
+                    if (!type && item.建物型態) {
+                        if (item.建物型態.includes('透天')) type = '透天';
+                        else if (item.建物型態.includes('大樓')) type = '大樓';
+                        else type = '華廈';
+                    }
+
+                    let name = item.建案名稱 || item.案名 || item.社區 || '';
+                    name = name.replace('大恆', '大御'); 
+
+                    return {
+                        ...item,
+                        成交日期: item.成交日期 || item.交易年月日,
+                        行政區: item.行政區 || item.鄉鎮市區,
+                        單價萬: price,
+                        類型: type,
+                        建案名稱: name
+                    };
+                });
+
+                renderRegionSelect(); myChart.hideLoading(); updateStats(); renderChart();
+            } catch (err) { console.error(err); alert("連線失敗: " + err.message); }
         }
 
         init();
-        window.addEventListener('resize', () => myChart && myChart.resize());
+        window.addEventListener('resize', () => { if(myChart) myChart.resize(); if(modalChart && !document.getElementById('project-modal').classList.contains('hidden')) modalChart.resize(); });
     </script>
 </body>
 </html>
