@@ -16,26 +16,20 @@
     </style>
 </head>
 <body class="p-6 md:p-10">
-    
     <div class="max-w-7xl mx-auto">
-        <!-- 標題 -->
         <header class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
-                <h1 class="text-3xl font-bold tracking-tight">彰化縣預售屋數據儀表板</h1>
-                <p class="text-zinc-500 mt-1">Sensing Homes 泰和茂 AI自動化決策V1.0</p>
+                <h1 class="text-3xl font-bold tracking-tight">市場數據決策儀表板</h1>
+                <p class="text-zinc-500 mt-1">Sensing Homes 泰和茂 AI 數據驅動規劃</p>
             </div>
-            
-            <!-- 第一層：分析維度切換 -->
             <div class="inline-flex bg-zinc-200/50 p-1 rounded-2xl" id="tab-container"></div>
         </header>
 
-        <!-- 第二層：產品類型過濾 -->
         <div class="mb-8 flex flex-wrap items-center gap-4">
             <span class="text-sm font-semibold text-zinc-400 uppercase tracking-wider">產品類型過濾：</span>
             <div class="flex bg-white rounded-xl shadow-sm border border-zinc-100 p-1" id="type-filter-container"></div>
         </div>
 
-        <!-- 總量統計指標 -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div class="stat-card">
                 <p class="text-sm font-medium text-zinc-500 mb-1" id="planned-label">全縣規劃總戶數</p>
@@ -53,7 +47,6 @@
             </div>
         </div>
 
-        <!-- 圖表區域 -->
         <main class="apple-card p-8 min-h-[650px] shadow-xl">
             <div id="chart-container" class="w-full h-[600px]"></div>
         </main>
@@ -68,7 +61,6 @@
 
         const tabs = ['量體全貌', '區域銷售率', '區域價格', '房型熱度'];
         const types = ['全部', '大樓', '華廈', '透天'];
-        
         let activeTab = '量體全貌';
         let activeType = '全部';
         let rawData = [];
@@ -112,11 +104,9 @@
             const filtered = getFilteredData();
             const totalPlanned = filtered.reduce((sum, item) => sum + getNum(item.規劃戶數), 0);
             const totalSold = filtered.reduce((sum, item) => sum + getNum(item.銷售戶數), 0);
-            
             const fmt = new Intl.NumberFormat('zh-TW');
             document.getElementById('stat-total-planned').innerText = fmt.format(Math.round(totalPlanned));
             document.getElementById('stat-total-sold').innerText = fmt.format(Math.round(totalSold));
-            
             const suffix = activeType === '全部' ? '全縣' : `${activeType}`;
             document.getElementById('planned-label').innerText = `${suffix}規劃總戶數`;
             document.getElementById('sold-label').innerText = `${suffix}已銷售總戶數`;
@@ -134,12 +124,14 @@
                         if (!treeGroups[reg]) treeGroups[reg] = { planned: 0, sold: 0, projects: [] };
                         const p = getNum(item.規劃戶數);
                         const s = getNum(item.銷售戶數);
+                        const price = getNum(item.銷售均價); // 讀取單價
                         treeGroups[reg].planned += p;
                         treeGroups[reg].sold += s;
                         treeGroups[reg].projects.push({ 
                             name: item.案名 || '未命名', 
                             value: p > 0 ? p : 0.01, 
-                            sold: s 
+                            sold: s,
+                            price: price // 將單價存入節點數據
                         });
                     });
 
@@ -152,7 +144,14 @@
 
                     option = {
                         tooltip: { 
-                            formatter: (p) => `<b>${p.name}</b><br/>規劃：${Math.round(p.value)} 戶<br/>已售：${Math.round(p.data.sold || 0)} 戶` 
+                            formatter: (p) => {
+                                const val = Math.round(p.value);
+                                const s = Math.round(p.data.sold || 0);
+                                const pr = p.data.price;
+                                let res = `<b>${p.name}</b><br/>規劃：${val} 戶<br/>已售：${s} 戶`;
+                                if (pr > 0) res += `<br/>均價：${pr} 萬/坪`;
+                                return res;
+                            }
                         },
                         series: [{
                             type: 'treemap', 
@@ -162,9 +161,16 @@
                             leafDepth: 1,
                             label: { 
                                 show: true, 
-                                formatter: (p) => `${p.name}\n規 ${Math.round(p.value)} / 售 ${Math.round(p.data.sold || 0)}` 
+                                // 修正關鍵：在此處加入單價顯示邏輯
+                                formatter: (p) => {
+                                    const val = Math.round(p.value);
+                                    const s = Math.round(p.data.sold || 0);
+                                    const pr = p.data.price;
+                                    let label = `${p.name}\n規 ${val} / 售 ${s}`;
+                                    if (pr > 0) label += ` / 價 ${pr}萬`;
+                                    return label;
+                                }
                             },
-                            // 🔥 修正關鍵：關閉 upperLabel 以移除重複的數字標題
                             upperLabel: { show: false },
                             itemStyle: { borderColor: '#fff', borderWidth: 2, gapWidth: 2 },
                             levels: [
@@ -202,23 +208,23 @@
                     break;
 
                 case '區域價格':
-                    const priceMap = {};
+                    const pMap = {};
                     data.forEach(item => {
                         const key = item.行政區 || '未知';
                         const price = getNum(item.銷售均價);
                         if (price > 0) {
-                            if (!priceMap[key]) priceMap[key] = { sum: 0, count: 0 };
-                            priceMap[key].sum += price;
-                            priceMap[key].count += 1;
+                            if (!pMap[key]) pMap[key] = { sum: 0, count: 0 };
+                            pMap[key].sum += price;
+                            pMap[key].count += 1;
                         }
                     });
-                    const priceData = Object.entries(priceMap).map(([k, v]) => ({ name: k, avg: Math.round(v.sum/v.count*10)/10 })).sort((a, b) => a.avg - b.avg);
+                    const pData = Object.entries(pMap).map(([k, v]) => ({ name: k, avg: Math.round(v.sum/v.count*10)/10 })).sort((a, b) => a.avg - b.avg);
                     option = {
                         tooltip: { formatter: '{b}: {c} 萬/坪' },
                         grid: { left: 100, right: 40 },
                         xAxis: { type: 'value', name: '萬/坪' },
-                        yAxis: { type: 'category', data: priceData.map(d => d.name) },
-                        series: [{ type: 'bar', data: priceData.map(d => d.avg), itemStyle: { color: '#27272A', borderRadius: [0, 4, 4, 0] }, label: { show: true, position: 'right' } }]
+                        yAxis: { type: 'category', data: pData.map(d => d.name) },
+                        series: [{ type: 'bar', data: pData.map(d => d.avg), itemStyle: { color: '#27272A', borderRadius: [0, 4, 4, 0] }, label: { show: true, position: 'right' } }]
                     };
                     break;
 
