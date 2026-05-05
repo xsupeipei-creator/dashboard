@@ -17,24 +17,21 @@
 </head>
 <body class="p-6 md:p-10">
     <div class="max-w-7xl mx-auto">
-        <!-- 標題 -->
         <header class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
                 <h1 class="text-3xl font-bold tracking-tight">市場數據決策儀表板</h1>
                 <p class="text-zinc-500 mt-1">Sensing Homes 泰和茂 AI 數據驅動規劃</p>
             </div>
-            <!-- 維度切換標籤：已移除房型熱度 -->
             <div class="inline-flex bg-zinc-200/50 p-1 rounded-2xl" id="tab-container"></div>
         </header>
 
-        <!-- 產品類型過濾器 -->
         <div class="mb-8 flex flex-wrap items-center gap-4">
             <span class="text-sm font-semibold text-zinc-400 uppercase tracking-wider">產品類型過濾：</span>
             <div class="flex bg-white rounded-xl shadow-sm border border-zinc-100 p-1" id="type-filter-container"></div>
         </div>
 
-        <!-- 頂部數據統計卡片 -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <!-- 頂部數據統計卡片：新增監測個案數 -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div class="stat-card">
                 <p class="text-sm font-medium text-zinc-500 mb-1" id="planned-label">全縣規劃總戶數</p>
                 <div class="flex items-baseline gap-2">
@@ -49,14 +46,20 @@
                     <span class="text-zinc-400 font-medium">戶</span>
                 </div>
             </div>
+            <!-- 新增個案數卡片 -->
+            <div class="stat-card">
+                <p class="text-sm font-medium text-zinc-500 mb-1" id="cases-label">全縣監測個案數</p>
+                <div class="flex items-baseline gap-2">
+                    <span id="stat-total-cases" class="text-4xl font-bold tracking-tight text-zinc-900">--</span>
+                    <span class="text-zinc-400 font-medium">案</span>
+                </div>
+            </div>
         </div>
 
-        <!-- 圖表主容器 -->
         <main class="apple-card p-8 min-h-[650px]">
             <div id="chart-container" class="w-full h-[600px]"></div>
         </main>
 
-        <!-- 頁尾標註 -->
         <footer class="mt-16 mb-8 text-center">
             <p class="text-zinc-400 text-sm tracking-widest font-medium">
                 2026 @ by 泰和茂營建開發團隊
@@ -73,8 +76,7 @@
 
         const tabs = ['量體全貌', '區域價格', '區域銷售率'];
         const types = ['全部', '大樓', '華廈', '透天'];
-        
-        let activeTab = '量體全貌'; 
+        let activeTab = '量體全貌';
         let activeType = '全部';
         let rawData = [];
         let myChart = echarts.init(document.getElementById('chart-container'));
@@ -113,16 +115,22 @@
             return activeType === '全部' ? rawData : rawData.filter(item => item.類型 === activeType);
         }
 
+        // 更新統計數據，包含個案數計算
         function updateStats() {
             const filtered = getFilteredData();
             const totalPlanned = filtered.reduce((sum, item) => sum + getNum(item.規劃戶數), 0);
             const totalSold = filtered.reduce((sum, item) => sum + getNum(item.銷售戶數), 0);
+            const totalCases = filtered.length; // 個案數即為篩選後的資料筆數
+            
             const fmt = new Intl.NumberFormat('zh-TW');
             document.getElementById('stat-total-planned').innerText = fmt.format(Math.round(totalPlanned));
             document.getElementById('stat-total-sold').innerText = fmt.format(Math.round(totalSold));
+            document.getElementById('stat-total-cases').innerText = fmt.format(totalCases);
+            
             const suffix = activeType === '全部' ? '全縣' : `${activeType}`;
             document.getElementById('planned-label').innerText = `${suffix}規劃總戶數`;
             document.getElementById('sold-label').innerText = `${suffix}已銷售總戶數`;
+            document.getElementById('cases-label').innerText = `${suffix}監測個案數`;
         }
 
         function renderChart() {
