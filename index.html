@@ -17,7 +17,6 @@
 </head>
 <body class="p-6 md:p-10">
     <div class="max-w-7xl mx-auto">
-        <!-- 標題 -->
         <header class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
                 <h1 class="text-3xl font-bold tracking-tight">市場數據決策儀表板</h1>
@@ -26,13 +25,11 @@
             <div class="inline-flex bg-zinc-200/50 p-1 rounded-2xl" id="tab-container"></div>
         </header>
 
-        <!-- 產品類型過濾器 -->
         <div class="mb-8 flex flex-wrap items-center gap-4">
             <span class="text-sm font-semibold text-zinc-400 uppercase tracking-wider">產品類型過濾：</span>
             <div class="flex bg-white rounded-xl shadow-sm border border-zinc-100 p-1" id="type-filter-container"></div>
         </div>
 
-        <!-- 頂部數據統計卡片 -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div class="stat-card">
                 <p class="text-sm font-medium text-zinc-500 mb-1" id="planned-label">全縣規劃總戶數</p>
@@ -50,12 +47,10 @@
             </div>
         </div>
 
-        <!-- 圖表主容器 -->
         <main class="apple-card p-8 min-h-[650px]">
             <div id="chart-container" class="w-full h-[600px]"></div>
         </main>
 
-        <!-- 頁尾標註 -->
         <footer class="mt-16 mb-8 text-center">
             <p class="text-zinc-400 text-sm tracking-widest font-medium">
                 2026 @ by 泰和茂營建開發團隊
@@ -72,7 +67,7 @@
 
         const tabs = ['量體全貌', '區域價格', '區域銷售率', '房型熱度'];
         const types = ['全部', '大樓', '華廈', '透天'];
-        let activeTab = '量體全貌'; // 開網頁預設顯示
+        let activeTab = '量體全貌';
         let activeType = '全部';
         let rawData = [];
         let myChart = echarts.init(document.getElementById('chart-container'));
@@ -128,91 +123,25 @@
             let option = {};
 
             switch (activeTab) {
-                case '區域價格':
-                    const pMap = {};
-                    data.forEach(item => {
-                        const key = item.行政區 || '未知';
-                        const pr = getNum(item.銷售均價);
-                        const name = item.案名 || '未命名';
-                        if (pr > 0) {
-                            if (!pMap[key]) pMap[key] = [];
-                            pMap[key].push({ pr, name });
-                        }
-                    });
-                    
-                    const pData = Object.entries(pMap).map(([k, items]) => {
-                        const avg = items.reduce((a, b) => a + b.pr, 0) / items.length;
-                        // 🔥 關鍵修正：找出單價最高的項目及其案名
-                        const topProject = items.reduce((prev, curr) => (prev.pr > curr.pr) ? prev : curr);
-                        return { 
-                            name: k, 
-                            avg: Math.round(avg * 10) / 10, 
-                            max: Math.round(topProject.pr * 10) / 10,
-                            gap: Math.round((topProject.pr - avg) * 10) / 10,
-                            topName: topProject.name // 儲存指標案名稱
-                        };
-                    }).sort((a, b) => a.max - b.max);
-
-                    option = {
-                        tooltip: { 
-                            trigger: 'axis',
-                            axisPointer: { type: 'shadow' },
-                            formatter: (params) => {
-                                const d = pData[params[0].dataIndex];
-                                return `<b>${d.name}</b><br/>區域均價：${d.avg} 萬/坪<br/>區域最高：${d.max} 萬/坪<br/>指標個案：${d.topName}`;
-                            }
-                        },
-                        legend: { data: ['區域均價', '最高價差'], bottom: 0 },
-                        grid: { left: 100, right: 180, bottom: 60, top: 20 }, // 加寬右側空間顯示案名
-                        xAxis: { type: 'value', name: '萬/坪', splitLine: { lineStyle: { type: 'dashed' } } },
-                        yAxis: { type: 'category', data: pData.map(d => d.name) },
-                        series: [
-                            { 
-                                name: '區域均價', 
-                                type: 'bar', 
-                                stack: 'price', 
-                                data: pData.map(d => d.avg), 
-                                itemStyle: { color: '#18181B' } 
-                            },
-                            { 
-                                name: '最高價差', 
-                                type: 'bar', 
-                                stack: 'price', 
-                                data: pData.map(d => d.gap), 
-                                itemStyle: { color: '#E4E4E7' },
-                                label: { 
-                                    show: true, 
-                                    position: 'right', 
-                                    // 🔥 修正關鍵：同時標註價格與案名
-                                    formatter: (p) => {
-                                        const d = pData[p.dataIndex];
-                                        return `🔝 ${d.max} | ${d.topName}`;
-                                    },
-                                    textStyle: { color: '#71717A', fontWeight: '600', fontSize: 11 }
-                                }
-                            }
-                        ]
-                    };
-                    break;
-
                 case '量體全貌':
                     const treeGroups = {};
                     data.forEach(item => {
                         const reg = item.行政區 || '其他';
-                        if (!treeGroups[reg]) treeGroups[reg] = { planned: 0, sold: 0, totalVal: 0, projects: [] };
+                        if (!treeGroups[reg]) treeGroups[reg] = { planned: 0, sold: 0, priceList: [], projects: [] };
                         const p = getNum(item.規劃戶數);
                         const s = getNum(item.銷售戶數);
                         const pr = getNum(item.銷售均價);
                         treeGroups[reg].planned += p;
                         treeGroups[reg].sold += s;
-                        treeGroups[reg].totalVal += (pr * p);
+                        if (pr > 0) treeGroups[reg].priceList.push(pr); // 收集單價列表
                         treeGroups[reg].projects.push({ name: item.案名 || '未命名', value: p > 0 ? p : 0.01, sold: s, price: pr });
                     });
                     const finalTreeData = Object.entries(treeGroups).map(([reg, d]) => ({ 
                         name: reg, 
                         value: Math.round(d.planned), 
                         sold: Math.round(d.sold), 
-                        avgPrice: d.planned > 0 ? Math.round(d.totalVal / d.planned * 10) / 10 : 0,
+                        // 🔥 修正邏輯：改為算術平均，與區域價格分頁一致
+                        avgPrice: d.priceList.length > 0 ? Math.round((d.priceList.reduce((a, b) => a + b, 0) / d.priceList.length) * 10) / 10 : 0,
                         children: d.projects 
                     }));
                     option = {
@@ -237,6 +166,51 @@
                     };
                     break;
 
+                case '區域價格':
+                    const pMap = {};
+                    data.forEach(item => {
+                        const key = item.行政區 || '未知';
+                        const pr = getNum(item.銷售均價);
+                        const name = item.案名 || '未命名';
+                        if (pr > 0) {
+                            if (!pMap[key]) pMap[key] = [];
+                            pMap[key].push({ pr, name });
+                        }
+                    });
+                    const pData = Object.entries(pMap).map(([k, items]) => {
+                        const avg = items.reduce((a, b) => a + b.pr, 0) / items.length;
+                        const topProject = items.reduce((prev, curr) => (prev.pr > curr.pr) ? prev : curr);
+                        return { 
+                            name: k, 
+                            avg: Math.round(avg * 10) / 10, 
+                            max: Math.round(topProject.pr * 10) / 10,
+                            gap: Math.round((topProject.pr - avg) * 10) / 10,
+                            topName: topProject.name
+                        };
+                    }).sort((a, b) => a.max - b.max);
+
+                    option = {
+                        tooltip: { 
+                            trigger: 'axis',
+                            axisPointer: { type: 'shadow' },
+                            formatter: (params) => {
+                                const d = pData[params[0].dataIndex];
+                                return `<b>${d.name}</b><br/>區域均價：${d.avg} 萬/坪<br/>區域最高：${d.max} 萬/坪<br/>指標個案：${d.topName}`;
+                            }
+                        },
+                        legend: { data: ['區域均價', '最高價差'], bottom: 0 },
+                        grid: { left: 100, right: 180, bottom: 60, top: 20 },
+                        xAxis: { type: 'value', name: '萬/坪' },
+                        yAxis: { type: 'category', data: pData.map(d => d.name) },
+                        series: [
+                            { name: '區域均價', type: 'bar', stack: 'price', data: pData.map(d => d.avg), itemStyle: { color: '#18181B' } },
+                            { name: '最高價差', type: 'bar', stack: 'price', data: pData.map(d => d.gap), itemStyle: { color: '#E4E4E7' },
+                              label: { show: true, position: 'right', formatter: (p) => `🔝 ${pData[p.dataIndex].max} | ${pData[p.dataIndex].topName}`, textStyle: { color: '#71717A', fontWeight: '600', fontSize: 11 } }
+                            }
+                        ]
+                    };
+                    break;
+
                 case '區域銷售率':
                     const saleMap = {};
                     data.forEach(item => {
@@ -249,10 +223,7 @@
                     option = {
                         tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
                         legend: { data: ['已銷售', '待售量', '銷售率'], bottom: 0 },
-                        dataZoom: [
-                            { type: 'slider', startValue: 0, endValue: 11, bottom: 40, zoomLock: true, brushSelect: false },
-                            { type: 'inside', zoomOnMouseWheel: false, moveOnMouseWheel: true }
-                        ],
+                        dataZoom: [{ type: 'slider', startValue: 0, endValue: 11, bottom: 40, zoomLock: true, brushSelect: false }, { type: 'inside', zoomOnMouseWheel: false, moveOnMouseWheel: true }],
                         grid: { bottom: 100, top: 40, left: 50, right: 50 },
                         xAxis: { type: 'category', data: saleData.map(d => d.name), axisLabel: { rotate: 30 }, min: 0, max: Math.max(11, saleData.length - 1) },
                         yAxis: [{ type: 'value', name: '戶數' }, { type: 'value', name: '銷售率%', max: 100, position: 'right' }],
