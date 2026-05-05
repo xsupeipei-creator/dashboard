@@ -10,6 +10,7 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
         body { font-family: 'Inter', 'Microsoft JhengHei', sans-serif; background: #F5F5F7; color: #1D1D1F; }
+        /* Apple 風格毛玻璃卡片 */
         .apple-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(20px); border-radius: 24px; border: 1px solid rgba(0,0,0,0.05); }
         .stat-card { background: white; border-radius: 20px; padding: 1.5rem; border: 1px solid rgba(0,0,0,0.03); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); }
         .active-pill { background: #1D1D1F !important; color: white !important; }
@@ -22,14 +23,17 @@
                 <h1 class="text-3xl font-bold tracking-tight">市場數據決策儀表板</h1>
                 <p class="text-zinc-500 mt-1">泰和茂 AI 數據驅動規劃V1.0</p>
             </div>
+            <!-- 維度切換標籤 -->
             <div class="inline-flex bg-zinc-200/50 p-1 rounded-2xl" id="tab-container"></div>
         </header>
 
+        <!-- 產品類型過濾器 -->
         <div class="mb-8 flex flex-wrap items-center gap-4">
             <span class="text-sm font-semibold text-zinc-400 uppercase tracking-wider">產品類型過濾：</span>
             <div class="flex bg-white rounded-xl shadow-sm border border-zinc-100 p-1" id="type-filter-container"></div>
         </div>
 
+        <!-- 頂部數據統計卡片 -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div class="stat-card">
                 <p class="text-sm font-medium text-zinc-500 mb-1" id="planned-label">全縣規劃總戶數</p>
@@ -47,6 +51,7 @@
             </div>
         </div>
 
+        <!-- 圖表主容器 -->
         <main class="apple-card p-8 min-h-[650px] shadow-xl">
             <div id="chart-container" class="w-full h-[600px]"></div>
         </main>
@@ -66,13 +71,15 @@
         let rawData = [];
         let myChart = echarts.init(document.getElementById('chart-container'));
 
+        // --- 介面渲染函數 ---
         function renderTabs() {
             const container = document.getElementById('tab-container');
             container.innerHTML = '';
             tabs.forEach(tab => {
                 const btn = document.createElement('button');
                 btn.innerText = tab;
-                btn.className = `px-6 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === tab ? 'bg-white text-black shadow-sm' : 'text-zinc-500 hover:text-black'}`;
+                const isActive = activeTab === tab;
+                btn.className = `px-6 py-2.5 rounded-xl text-sm font-semibold transition-all ${isActive ? 'bg-white text-black shadow-sm' : 'text-zinc-500 hover:text-black'}`;
                 btn.onclick = () => { activeTab = tab; renderTabs(); renderChart(); };
                 container.appendChild(btn);
             });
@@ -96,10 +103,10 @@
         };
 
         function getFilteredData() {
-            if (activeType === '全部') return rawData;
-            return rawData.filter(item => item.類型 === activeType);
+            return activeType === '全部' ? rawData : rawData.filter(item => item.類型 === activeType);
         }
 
+        // --- 統計更新邏輯 ---
         function updateStats() {
             const filtered = getFilteredData();
             const totalPlanned = filtered.reduce((sum, item) => sum + getNum(item.規劃戶數), 0);
@@ -112,6 +119,7 @@
             document.getElementById('sold-label').innerText = `${suffix}已銷售總戶數`;
         }
 
+        // --- 圖表核心邏輯 ---
         function renderChart() {
             const data = getFilteredData();
             let option = {};
@@ -121,62 +129,41 @@
                     const treeGroups = {};
                     data.forEach(item => {
                         const reg = item.行政區 || '其他';
-                        if (!treeGroups[reg]) treeGroups[reg] = { planned: 0, sold: 0, projects: [] };
+                        if (!treeGroups[reg]) treeGroups[reg] = { planned: 0, sold: 0, totalVal: 0, projects: [] };
                         const p = getNum(item.規劃戶數);
                         const s = getNum(item.銷售戶數);
-                        const price = getNum(item.銷售均價); // 讀取單價
+                        const pr = getNum(item.銷售均價);
                         treeGroups[reg].planned += p;
                         treeGroups[reg].sold += s;
-                        treeGroups[reg].projects.push({ 
-                            name: item.案名 || '未命名', 
-                            value: p > 0 ? p : 0.01, 
-                            sold: s,
-                            price: price // 將單價存入節點數據
-                        });
+                        treeGroups[reg].totalVal += (pr * p);
+                        treeGroups[reg].projects.push({ name: item.案名 || '未命名', value: p > 0 ? p : 0.01, sold: s, price: pr });
                     });
-
                     const finalTreeData = Object.entries(treeGroups).map(([reg, d]) => ({ 
                         name: reg, 
                         value: Math.round(d.planned), 
                         sold: Math.round(d.sold), 
+                        avgPrice: d.planned > 0 ? Math.round(d.totalVal / d.planned * 10) / 10 : 0,
                         children: d.projects 
                     }));
 
                     option = {
-                        tooltip: { 
-                            formatter: (p) => {
+                        tooltip: { formatter: (p) => {
+                            const val = Math.round(p.value);
+                            const s = Math.round(p.data.sold || 0);
+                            const pr = p.data.avgPrice || p.data.price;
+                            return `<b>${p.name}</b><br/>規劃：${val} 戶<br/>已售：${s} 戶${pr > 0 ? `<br/>單價：${pr} 萬/坪` : ''}`;
+                        }},
+                        series: [{
+                            type: 'treemap', data: finalTreeData, roam: false, nodeClick: 'zoomTo', leafDepth: 1,
+                            label: { show: true, formatter: (p) => {
                                 const val = Math.round(p.value);
                                 const s = Math.round(p.data.sold || 0);
-                                const pr = p.data.price;
-                                let res = `<b>${p.name}</b><br/>規劃：${val} 戶<br/>已售：${s} 戶`;
-                                if (pr > 0) res += `<br/>均價：${pr} 萬/坪`;
-                                return res;
-                            }
-                        },
-                        series: [{
-                            type: 'treemap', 
-                            data: finalTreeData, 
-                            roam: false, 
-                            nodeClick: 'zoomTo', 
-                            leafDepth: 1,
-                            label: { 
-                                show: true, 
-                                // 修正關鍵：在此處加入單價顯示邏輯
-                                formatter: (p) => {
-                                    const val = Math.round(p.value);
-                                    const s = Math.round(p.data.sold || 0);
-                                    const pr = p.data.price;
-                                    let label = `${p.name}\n規 ${val} / 售 ${s}`;
-                                    if (pr > 0) label += ` / 價 ${pr}萬`;
-                                    return label;
-                                }
-                            },
-                            upperLabel: { show: false },
+                                const pr = p.data.avgPrice || p.data.price;
+                                return `${p.name}\n規 ${val} / 售 ${s}${pr > 0 ? ` / 價 ${pr}萬` : ''}`;
+                            }},
+                            upperLabel: { show: false }, // 移除重複的上方數字標題
                             itemStyle: { borderColor: '#fff', borderWidth: 2, gapWidth: 2 },
-                            levels: [
-                                { itemStyle: { borderColor: '#F4F4F5', borderWidth: 4, gapWidth: 4 } }, 
-                                { colorSaturation: [0.3, 0.6] }
-                            ]
+                            levels: [{ itemStyle: { borderColor: '#F4F4F5', borderWidth: 4, gapWidth: 4 } }, { colorSaturation: [0.3, 0.6] }]
                         }]
                     };
                     break;
@@ -196,8 +183,12 @@
                     option = {
                         tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
                         legend: { data: ['已銷售', '待售量', '銷售率'], bottom: 0 },
-                        dataZoom: [{ type: 'slider', start: 0, end: 50, bottom: 40 }, { type: 'inside' }],
-                        xAxis: { type: 'category', data: saleData.map(d => d.name), axisLabel: { rotate: 30 } },
+                        dataZoom: [
+                            { type: 'slider', startValue: 0, endValue: 11, bottom: 40, zoomLock: true, brushSelect: false },
+                            { type: 'inside', zoomOnMouseWheel: false, moveOnMouseWheel: true } // 啟用平移滾輪操作
+                        ],
+                        grid: { bottom: 100, top: 40, left: 50, right: 50 },
+                        xAxis: { type: 'category', data: saleData.map(d => d.name), axisLabel: { rotate: 30 }, min: 0, max: Math.max(11, saleData.length - 1) },
                         yAxis: [{ type: 'value', name: '戶數' }, { type: 'value', name: '銷售率%', max: 100, position: 'right' }],
                         series: [
                             { name: '已銷售', type: 'bar', stack: 'total', data: saleData.map(d => Math.round(d.sold)), itemStyle: { color: '#18181B' } },
@@ -211,19 +202,16 @@
                     const pMap = {};
                     data.forEach(item => {
                         const key = item.行政區 || '未知';
-                        const price = getNum(item.銷售均價);
-                        if (price > 0) {
+                        const pr = getNum(item.銷售均價);
+                        if (pr > 0) {
                             if (!pMap[key]) pMap[key] = { sum: 0, count: 0 };
-                            pMap[key].sum += price;
-                            pMap[key].count += 1;
+                            pMap[key].sum += pr; pMap[key].count += 1;
                         }
                     });
                     const pData = Object.entries(pMap).map(([k, v]) => ({ name: k, avg: Math.round(v.sum/v.count*10)/10 })).sort((a, b) => a.avg - b.avg);
                     option = {
-                        tooltip: { formatter: '{b}: {c} 萬/坪' },
-                        grid: { left: 100, right: 40 },
-                        xAxis: { type: 'value', name: '萬/坪' },
-                        yAxis: { type: 'category', data: pData.map(d => d.name) },
+                        tooltip: { formatter: '{b}: {c} 萬/坪' }, grid: { left: 100, right: 40 },
+                        xAxis: { type: 'value', name: '萬/坪' }, yAxis: { type: 'category', data: pData.map(d => d.name) },
                         series: [{ type: 'bar', data: pData.map(d => d.avg), itemStyle: { color: '#27272A', borderRadius: [0, 4, 4, 0] }, label: { show: true, position: 'right' } }]
                     };
                     break;
@@ -239,10 +227,8 @@
                     });
                     const regions = Object.keys(roomMap);
                     option = {
-                        legend: { data: roomTypes, bottom: 0 },
-                        tooltip: { trigger: 'axis' },
-                        xAxis: { type: 'category', data: regions, axisLabel: { rotate: 30 } },
-                        yAxis: { type: 'value' },
+                        legend: { data: roomTypes, bottom: 0 }, tooltip: { trigger: 'axis' },
+                        xAxis: { type: 'category', data: regions, axisLabel: { rotate: 30 } }, yAxis: { type: 'value' },
                         series: roomTypes.map(t => ({ name: t, type: 'bar', stack: 'total', data: regions.map(r => Math.round(roomMap[r][t])) }))
                     };
                     break;
@@ -253,7 +239,7 @@
         async function init() {
             renderTabs();
             renderTypeFilters();
-            myChart.showLoading({ text: '同步數據中...', color: '#18181B' });
+            myChart.showLoading({ text: '數據同步中...', color: '#18181B' });
             try {
                 const supabase = window.supabase.createClient(config.url, config.key);
                 const { data, error } = await supabase.from(config.table).select('*');
