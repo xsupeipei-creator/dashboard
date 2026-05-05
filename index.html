@@ -100,7 +100,8 @@
             trendTable: 'real_estate_records'
         };
 
-        const tabs = ['量體全貌', '區域價格', '區域銷售率', '趨勢分析'];
+        // 🔥 更新分頁名稱
+        const tabs = ['量體全貌', '區域價格', '區域銷售率', '價格趨勢', '房型趨勢'];
         const types = ['全部', '大樓', '華廈', '透天'];
         let activeTab = '量體全貌';
         let activeType = '全部';
@@ -135,7 +136,7 @@
                 btn.className = `px-6 py-2.5 rounded-xl text-sm font-semibold transition-all ${isActive ? 'bg-white text-black shadow-sm' : 'text-zinc-500 hover:text-black'}`;
                 btn.onclick = () => { 
                     activeTab = tab; 
-                    if (tab !== '趨勢分析') activeRegion = null;
+                    if (!['價格趨勢', '房型趨勢'].includes(tab)) activeRegion = null;
                     renderTabs(); 
                     renderChart(); 
                 };
@@ -254,14 +255,77 @@
 
         function renderChart() {
             const filterWrapper = document.getElementById('region-filter-wrapper');
-            filterWrapper.classList.toggle('hidden', activeTab !== '趨勢分析');
+            filterWrapper.classList.toggle('hidden', !['價格趨勢', '房型趨勢'].includes(activeTab));
 
             const chartData = activeType === '全部' ? rawData : rawData.filter(item => item.類型 === activeType);
             let option = {};
             myChart.off('click'); 
 
             switch (activeTab) {
-                case '趨勢分析':
+                case '房型趨勢':
+                    let fData = trendData;
+                    if (activeType !== '全部') fData = fData.filter(item => item.類型 === activeType);
+                    if (activeRegion) fData = fData.filter(item => item.行政區 === activeRegion);
+
+                    let maxYM = 0;
+                    fData.forEach(item => {
+                        const dateStr = String(item.成交日期 || '').replace(/[^0-9]/g, '');
+                        if (dateStr.length >= 6) {
+                            let y = parseInt(dateStr.substring(0, dateStr.length === 7 ? 3 : 4));
+                            let mo = parseInt(dateStr.substring(dateStr.length === 7 ? 3 : 4, dateStr.length === 7 ? 5 : 6));
+                            let dispY = y > 1900 ? y - 1911 : y;
+                            let ym = dispY * 100 + mo;
+                            if (ym > maxYM) maxYM = ym;
+                        }
+                    });
+
+                    let maxTotalMonths = Math.floor(maxYM / 100) * 12 + (maxYM % 100);
+                    let minTotalMonths = maxTotalMonths - 11;
+
+                    const roomStats = {};
+                    fData.forEach(item => {
+                        const dateStr = String(item.成交日期 || '').replace(/[^0-9]/g, '');
+                        if (dateStr.length >= 6) {
+                            let y = parseInt(dateStr.substring(0, dateStr.length === 7 ? 3 : 4));
+                            let mo = parseInt(dateStr.substring(dateStr.length === 7 ? 3 : 4, dateStr.length === 7 ? 5 : 6));
+                            let dispY = y > 1900 ? y - 1911 : y;
+                            let totalMonths = dispY * 12 + mo;
+
+                            if (totalMonths >= minTotalMonths && totalMonths <= maxTotalMonths) {
+                                const r = item['建物現況格局-房'] || item['建物格局-房'] || item['房數'];
+                                let label = (r !== undefined && r !== null && !isNaN(parseInt(r))) ? (parseInt(r) === 0 ? '套房/其他' : (parseInt(r) >= 5 ? '5房以上' : `${parseInt(r)}房`)) : '未知房型';
+                                
+                                if (!roomStats[label]) roomStats[label] = { sum: 0, validPriceCount: 0, count: 0 };
+                                roomStats[label].count += 1;
+                                const p = getNum(item.單價萬);
+                                if (p > 0) { roomStats[label].sum += p; roomStats[label].validPriceCount += 1; }
+                            }
+                        }
+                    });
+
+                    const rOrder = ['套房/其他', '1房', '2房', '3房', '4房', '5房以上', '未知房型'];
+                    const rSorted = Object.keys(roomStats).sort((a, b) => rOrder.indexOf(a) - rOrder.indexOf(b));
+                    const rBarData = rSorted.map(k => roomStats[k].count);
+                    const rLineData = rSorted.map(k => roomStats[k].validPriceCount > 0 ? (roomStats[k].sum / roomStats[k].validPriceCount).toFixed(1) : null);
+
+                    option = {
+                        title: { text: `${activeRegion || '全縣'} 近一年房型價量趨勢`, left: 'center', top: 10, textStyle: { color: '#18181B', fontSize: 16, fontWeight: '600' } },
+                        tooltip: { trigger: 'axis', axisPointer: { type: 'cross', crossStyle: { color: '#999' } }, backgroundColor: 'rgba(255, 255, 255, 0.95)', borderColor: '#E4E4E7', textStyle: { color: '#18181B' } },
+                        legend: { data: ['銷售量 (戶)', '平均價格'], bottom: 0 },
+                        grid: { left: 50, right: 50, bottom: 40, top: 60, containLabel: true },
+                        xAxis: [ { type: 'category', data: rSorted, axisPointer: { type: 'shadow' }, axisLabel: { fontWeight: 'bold', color: '#3F3F46' } } ],
+                        yAxis: [
+                            { type: 'value', name: '銷售量 (戶)', minInterval: 1, splitLine: { show: false }, axisLabel: { color: '#71717A' } },
+                            { type: 'value', name: '均價 (萬/坪)', splitLine: { lineStyle: { type: 'dashed', color: '#F4F4F5' } }, axisLabel: { color: '#EF4444' } }
+                        ],
+                        series: [
+                            { name: '銷售量 (戶)', type: 'bar', data: rBarData, barMaxWidth: 80, itemStyle: { color: '#3F3F46', borderRadius: [4, 4, 0, 0] }, label: { show: true, position: 'top', formatter: '{c} 戶', color: '#71717A' } },
+                            { name: '平均價格', type: 'line', yAxisIndex: 1, data: rLineData, itemStyle: { color: '#EF4444' }, lineStyle: { width: 3 }, symbolSize: 10, label: { show: true, position: 'top', formatter: '{c} 萬', color: '#EF4444', fontWeight: 'bold' } }
+                        ]
+                    };
+                    break;
+
+                case '價格趨勢':
                     let tData = trendData;
                     if (activeType !== '全部') tData = tData.filter(item => item.類型 === activeType);
                     if (activeRegion) tData = tData.filter(item => item.行政區 === activeRegion);
@@ -281,12 +345,13 @@
                     });
                     const trendList = Object.entries(monthMap).map(([k, v]) => ({ month: k, avg: (v.sum / v.count).toFixed(1), skey: v.skey })).sort((a, b) => a.skey - b.skey);
                     option = {
-                        title: { text: `${activeRegion || '全縣'} 歷月趨勢`, left: 'center' },
+                        title: { text: `${activeRegion || '全縣'} 歷月均價趨勢`, left: 'center' },
                         xAxis: { type: 'category', data: trendList.map(d => d.month) },
                         yAxis: { type: 'value', scale: true, name: '萬/坪' },
                         series: [{ type: 'line', smooth: true, data: trendList.map(d => d.avg), lineStyle: { width: 3, color: '#18181B' }, itemStyle: { color: '#18181B' }, label: { show: true } }]
                     };
                     break;
+
                 case '量體全貌':
                     const treeGroups = {};
                     chartData.forEach(item => {
@@ -301,7 +366,7 @@
                             type: 'treemap', 
                             data: Object.entries(treeGroups).map(([reg, d]) => ({ name: reg, value: Math.round(d.planned), sold: Math.round(d.sold), avgPrice: d.priceList.length > 0 ? (d.priceList.reduce((a,b)=>a+b,0)/d.priceList.length).toFixed(1) : 0, children: d.projects })),
                             leafDepth: 1, 
-                            roam: false, // 🔥 強制鎖死畫布，取消滾輪縮放與拖曳
+                            roam: false, 
                             nodeClick: 'zoomTo', 
                             label: { show: true, formatter: (p) => `${p.name}\n規 ${Math.round(p.value)} / 售 ${Math.round(p.data.sold || 0)}` }
                         }]
@@ -361,25 +426,10 @@
                         yAxis: { type: 'category', data: saleData.map(d => d.name) },
                         series: [
                             {
-                                name: '已銷售',
-                                type: 'bar',
-                                stack: 'total',
-                                data: saleData.map(d => d.sold),
-                                itemStyle: { color: '#3F3F46' },
-                                label: { show: true, position: 'inside', color: '#fff', formatter: (p) => p.value > 0 ? p.value : '' }
+                                name: '已銷售', type: 'bar', stack: 'total', data: saleData.map(d => d.sold), itemStyle: { color: '#3F3F46' }, label: { show: true, position: 'inside', color: '#fff', formatter: (p) => p.value > 0 ? p.value : '' }
                             },
                             {
-                                name: '待售量',
-                                type: 'bar',
-                                stack: 'total',
-                                data: saleData.map(d => d.remaining),
-                                itemStyle: { color: '#E4E4E7' },
-                                label: { 
-                                    show: true, 
-                                    position: 'right', 
-                                    formatter: (p) => `${p.value} 戶 (${saleData[p.dataIndex].rate}%)`, 
-                                    textStyle: { color: '#71717A', fontWeight: '600', fontSize: 11 } 
-                                }
+                                name: '待售量', type: 'bar', stack: 'total', data: saleData.map(d => d.remaining), itemStyle: { color: '#E4E4E7' }, label: { show: true, position: 'right', formatter: (p) => `${p.value} 戶 (${saleData[p.dataIndex].rate}%)`, textStyle: { color: '#71717A', fontWeight: '600', fontSize: 11 } }
                             }
                         ]
                     };
@@ -396,13 +446,26 @@
                 const supabase = window.supabase.createClient(config.url, config.key);
                 const [projects, trends] = await Promise.all([ fetchAllSupabaseData(supabase, config.table), fetchAllSupabaseData(supabase, config.trendTable) ]);
                 rawData = projects || [];
-                trendData = (trends || []).map(item => ({
-                    ...item,
-                    成交日期: item.成交日期 || item.交易年月日,
-                    行政區: item.行政區 || item.鄉鎮市區,
-                    單價萬: item.單價萬 || (parseFloat(item.單價元平方公尺) * 3.30579 / 10000).toFixed(1),
-                    建案名稱: (item.建案名稱 || item.案名 || '').replace('大恆', '大御')
-                }));
+                
+                // 🔥 修復：補回「建物型態」轉譯為「類型」的邏輯
+                trendData = (trends || []).map(item => {
+                    let type = item.類型;
+                    if (!type && item.建物型態) {
+                        if (item.建物型態.includes('透天')) type = '透天';
+                        else if (item.建物型態.includes('大樓') || item.建物型態.includes('住宅大樓')) type = '大樓';
+                        else type = '華廈';
+                    }
+
+                    return {
+                        ...item,
+                        成交日期: item.成交日期 || item.交易年月日,
+                        行政區: item.行政區 || item.鄉鎮市區,
+                        單價萬: item.單價萬 || (parseFloat(item.單價元平方公尺) * 3.30579 / 10000).toFixed(1),
+                        建案名稱: (item.建案名稱 || item.案名 || '').replace('大恆', '大御'),
+                        類型: type // 重新賦予正確的產品類型，解決過濾空白問題
+                    };
+                });
+                
                 renderRegionSelect(); myChart.hideLoading(); renderChart();
             } catch (err) { console.error(err); }
         }
