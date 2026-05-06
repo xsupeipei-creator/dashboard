@@ -100,8 +100,7 @@
             trendTable: 'real_estate_records'
         };
 
-        // 🔥 更新分頁名稱
-        const tabs = ['量體全貌', '區域價格', '區域銷售率', '價格趨勢', '房型趨勢'];
+        const tabs = ['量體全貌', '區域價格', '區域銷售率', '價格趨勢', '房型趨勢', '主力坪數'];
         const types = ['全部', '大樓', '華廈', '透天'];
         let activeTab = '量體全貌';
         let activeType = '全部';
@@ -136,7 +135,7 @@
                 btn.className = `px-6 py-2.5 rounded-xl text-sm font-semibold transition-all ${isActive ? 'bg-white text-black shadow-sm' : 'text-zinc-500 hover:text-black'}`;
                 btn.onclick = () => { 
                     activeTab = tab; 
-                    if (!['價格趨勢', '房型趨勢'].includes(tab)) activeRegion = null;
+                    if (!['價格趨勢', '房型趨勢', '主力坪數'].includes(tab)) activeRegion = null;
                     renderTabs(); 
                     renderChart(); 
                 };
@@ -255,14 +254,134 @@
 
         function renderChart() {
             const filterWrapper = document.getElementById('region-filter-wrapper');
-            filterWrapper.classList.toggle('hidden', !['價格趨勢', '房型趨勢'].includes(activeTab));
+            filterWrapper.classList.toggle('hidden', !['價格趨勢', '房型趨勢', '主力坪數'].includes(activeTab));
 
             const chartData = activeType === '全部' ? rawData : rawData.filter(item => item.類型 === activeType);
             let option = {};
             myChart.off('click'); 
 
+            // 🔥 在此處加入 `{}` 建立 Block Scope，徹底防止變數衝突！
             switch (activeTab) {
-                case '房型趨勢':
+                case '主力坪數': {
+                    let pData = trendData;
+                    if (activeType !== '全部') pData = pData.filter(item => item.類型 === activeType);
+                    if (activeRegion) pData = pData.filter(item => item.行政區 === activeRegion);
+
+                    let maxPYM = 0;
+                    pData.forEach(item => {
+                        const dateStr = String(item.成交日期 || '').replace(/[^0-9]/g, '');
+                        if (dateStr.length >= 6) {
+                            let y = parseInt(dateStr.substring(0, dateStr.length === 7 ? 3 : 4));
+                            let mo = parseInt(dateStr.substring(dateStr.length === 7 ? 3 : 4, dateStr.length === 7 ? 5 : 6));
+                            let dispY = y > 1900 ? y - 1911 : y;
+                            let ym = dispY * 100 + mo;
+                            if (ym > maxPYM) maxPYM = ym;
+                        }
+                    });
+                    let maxPTotalMonths = Math.floor(maxPYM / 100) * 12 + (maxPYM % 100);
+                    let minPTotalMonths = maxPTotalMonths - 11;
+
+                    const roomTypesArr = ['1房', '2房', '3房', '4房', '5房以上'];
+                    const pingRangesArr = ['< 20坪', '20-25坪', '25-30坪', '30-35坪', '35-40坪', '40-45坪', '45-50坪', '50-60坪', '> 60坪'];
+                    
+                    const pingStats = {
+                        '1房': { total: 0, ranges: Array(9).fill(0) },
+                        '2房': { total: 0, ranges: Array(9).fill(0) },
+                        '3房': { total: 0, ranges: Array(9).fill(0) },
+                        '4房': { total: 0, ranges: Array(9).fill(0) },
+                        '5房以上': { total: 0, ranges: Array(9).fill(0) },
+                    };
+
+                    pData.forEach(item => {
+                        const dateStr = String(item.成交日期 || '').replace(/[^0-9]/g, '');
+                        if (dateStr.length >= 6) {
+                            let y = parseInt(dateStr.substring(0, dateStr.length === 7 ? 3 : 4));
+                            let mo = parseInt(dateStr.substring(dateStr.length === 7 ? 3 : 4, dateStr.length === 7 ? 5 : 6));
+                            let dispY = y > 1900 ? y - 1911 : y;
+                            let totalMonths = dispY * 12 + mo;
+
+                            if (totalMonths >= minPTotalMonths && totalMonths <= maxPTotalMonths) {
+                                const r = item['建物現況格局-房'] || item['建物格局-房'] || item['房數'];
+                                let rLabel = '';
+                                if (r !== undefined && r !== null && !isNaN(parseInt(r))) {
+                                    const parsed = parseInt(r);
+                                    if (parsed === 1) rLabel = '1房';
+                                    else if (parsed === 2) rLabel = '2房';
+                                    else if (parsed === 3) rLabel = '3房';
+                                    else if (parsed === 4) rLabel = '4房';
+                                    else if (parsed >= 5) rLabel = '5房以上';
+                                }
+
+                                const ping = parseFloat(item.扣車位淨坪數);
+                                if (rLabel && pingStats[rLabel] && ping > 0) {
+                                    let pIndex = 0;
+                                    if(ping < 20) pIndex = 0;
+                                    else if(ping < 25) pIndex = 1;
+                                    else if(ping < 30) pIndex = 2;
+                                    else if(ping < 35) pIndex = 3;
+                                    else if(ping < 40) pIndex = 4;
+                                    else if(ping < 45) pIndex = 5;
+                                    else if(ping < 50) pIndex = 6;
+                                    else if(ping < 60) pIndex = 7;
+                                    else pIndex = 8;
+                                    
+                                    pingStats[rLabel].total += 1;
+                                    pingStats[rLabel].ranges[pIndex] += 1;
+                                }
+                            }
+                        }
+                    });
+
+                    const maxPctMap = {};
+                    roomTypesArr.forEach((rt, xIdx) => {
+                        let maxPct = 0;
+                        if(pingStats[rt].total > 0) {
+                            pingStats[rt].ranges.forEach(count => {
+                                const pct = Math.round((count / pingStats[rt].total) * 100);
+                                if(pct > maxPct) maxPct = pct;
+                            });
+                        }
+                        maxPctMap[xIdx] = maxPct;
+                    });
+
+                    const scatterData = [];
+                    roomTypesArr.forEach((rt, xIdx) => {
+                        const total = pingStats[rt].total;
+                        if(total > 0) {
+                            pingStats[rt].ranges.forEach((count, yIdx) => {
+                                if(count > 0) {
+                                    const pct = Math.round((count / total) * 100);
+                                    scatterData.push([xIdx, yIdx, pct, count]);
+                                }
+                            });
+                        }
+                    });
+
+                    option = {
+                        title: { text: `${activeRegion || '全縣'} 近一年各房型「主力坪數」分佈分析`, left: 'center', top: 10, textStyle: { color: '#18181B', fontSize: 16, fontWeight: '600' } },
+                        tooltip: {
+                            formatter: function (p) {
+                                return `<div class="font-sans text-sm">
+                                        <b>${roomTypesArr[p.data[0]]}</b><br/>
+                                        淨坪數落點：${pingRangesArr[p.data[1]]}<br/>
+                                        佔該房型比例：<b class="text-lg text-red-500">${p.data[2]}%</b> (${p.data[3]}戶)
+                                        </div>`;
+                            },
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)', borderColor: '#E4E4E7', textStyle: { color: '#18181B' }, extraCssText: 'box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border-radius: 8px;'
+                        },
+                        grid: { left: 80, right: 80, bottom: 40, top: 80, containLabel: true },
+                        xAxis: { type: 'category', data: roomTypesArr, splitLine: { show: true, lineStyle: { type: 'dashed', color: '#F4F4F5' } }, axisLabel: { fontWeight: 'bold', color: '#3F3F46', fontSize: 14 } },
+                        yAxis: { type: 'category', data: pingRangesArr, name: '扣車位淨坪數', splitLine: { show: true, lineStyle: { type: 'dashed', color: '#F4F4F5' } }, axisLabel: { color: '#71717A' } },
+                        series: [{
+                            name: '坪數佔比', type: 'scatter', data: scatterData,
+                            symbolSize: function (data) { return Math.max(16, data[2] * 1.5); },
+                            itemStyle: { color: function(p) { return (p.data[2] === maxPctMap[p.data[0]] && p.data[2] > 0) ? '#EF4444' : '#D4D4D8'; }, opacity: 0.9 },
+                            label: { show: true, formatter: function (p) { return p.data[2] + '%'; }, position: 'top', color: '#18181B', fontWeight: 'bold', distance: 10 }
+                        }]
+                    };
+                    break;
+                }
+                case '房型趨勢': {
                     let fData = trendData;
                     if (activeType !== '全部') fData = fData.filter(item => item.類型 === activeType);
                     if (activeRegion) fData = fData.filter(item => item.行政區 === activeRegion);
@@ -324,8 +443,8 @@
                         ]
                     };
                     break;
-
-                case '價格趨勢':
+                }
+                case '價格趨勢': {
                     let tData = trendData;
                     if (activeType !== '全部') tData = tData.filter(item => item.類型 === activeType);
                     if (activeRegion) tData = tData.filter(item => item.行政區 === activeRegion);
@@ -351,8 +470,8 @@
                         series: [{ type: 'line', smooth: true, data: trendList.map(d => d.avg), lineStyle: { width: 3, color: '#18181B' }, itemStyle: { color: '#18181B' }, label: { show: true } }]
                     };
                     break;
-
-                case '量體全貌':
+                }
+                case '量體全貌': {
                     const treeGroups = {};
                     chartData.forEach(item => {
                         const reg = item.行政區 || '其他';
@@ -373,8 +492,8 @@
                     };
                     myChart.on('click', (params) => { if (params.data.children) { activeRegion = params.name; updateStats(); } else { openProjectModal(params.name); } });
                     break;
-                
-                case '區域價格':
+                }
+                case '區域價格': {
                     const pMap = {};
                     chartData.forEach(item => {
                         const key = item.行政區 || '未知'; const pr = getNum(item.銷售均價);
@@ -395,8 +514,8 @@
                         ]
                     };
                     break;
-
-                case '區域銷售率':
+                }
+                case '區域銷售率': {
                     const saleMap = {};
                     chartData.forEach(item => {
                         const label = item.行政區 || '未知';
@@ -434,6 +553,7 @@
                         ]
                     };
                     break;
+                }
             }
             myChart.setOption(option, true);
             updateStats();
@@ -441,13 +561,12 @@
 
         async function init() {
             renderTabs(); renderTypeFilters();
-            myChart.showLoading();
+            myChart.showLoading({ text: '大數據精算中...', color: '#18181B' });
             try {
                 const supabase = window.supabase.createClient(config.url, config.key);
                 const [projects, trends] = await Promise.all([ fetchAllSupabaseData(supabase, config.table), fetchAllSupabaseData(supabase, config.trendTable) ]);
                 rawData = projects || [];
                 
-                // 🔥 修復：補回「建物型態」轉譯為「類型」的邏輯
                 trendData = (trends || []).map(item => {
                     let type = item.類型;
                     if (!type && item.建物型態) {
@@ -456,13 +575,18 @@
                         else type = '華廈';
                     }
 
+                    let areaSqm = parseFloat(item.建物移轉總面積平方公尺) || parseFloat(item.總面積平方公尺) || parseFloat(item['建物移轉總面積(平方公尺)']) || 0;
+                    let parkSqm = parseFloat(item.車位移轉總面積平方公尺) || parseFloat(item['車位移轉總面積(平方公尺)']) || 0;
+                    let netPing = item.坪數 ? parseFloat(item.坪數) : (areaSqm > 0 ? ((areaSqm - parkSqm) * 0.3025).toFixed(2) : 0);
+
                     return {
                         ...item,
                         成交日期: item.成交日期 || item.交易年月日,
                         行政區: item.行政區 || item.鄉鎮市區,
                         單價萬: item.單價萬 || (parseFloat(item.單價元平方公尺) * 3.30579 / 10000).toFixed(1),
                         建案名稱: (item.建案名稱 || item.案名 || '').replace('大恆', '大御'),
-                        類型: type // 重新賦予正確的產品類型，解決過濾空白問題
+                        類型: type,
+                        扣車位淨坪數: netPing
                     };
                 });
                 
